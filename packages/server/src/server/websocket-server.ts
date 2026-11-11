@@ -137,6 +137,7 @@ import type { BrowserToolsBroker } from "./browser-tools/broker.js";
 import type { DaemonRuntimeConfig } from "./session/daemon/daemon-session.js";
 import { DirectorySyncService } from "./directory-sync/index.js";
 import { OWNER_PERMISSIONS, type DaemonPermission } from "./authorization/index.js";
+import type { OrderingService } from "./ordering/index.js";
 import type { WorkspaceLabelService } from "./workspace-labels/index.js";
 import {
   APPLICATION_SOCKET_LEASE_CHECK_INTERVAL_MS,
@@ -503,6 +504,7 @@ interface PluginSessionConnection extends SessionConnectionBase {
 type SessionConnection = ReconnectableSessionConnection | PluginSessionConnection;
 
 interface SocketSessionOptions {
+  principalId: string;
   sourceId?: string;
   clientId: string;
   appVersion: string | null;
@@ -590,6 +592,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly workspaceRegistry: WorkspaceRegistry;
   private readonly workspaceBaseBranch: WorkspaceBaseBranchService;
   private readonly workspaceLabelService: WorkspaceLabelService | null;
+  private readonly orderingService: OrderingService | undefined;
   private readonly scheduleService: ScheduleService;
   private readonly checkoutDiffManager: CheckoutDiffManager;
   private readonly github: ForgeService;
@@ -720,6 +723,7 @@ export class VoiceAssistantWebSocketServer {
     orchestrationSkills?: SessionOptions["orchestrationSkills"],
     workspaceLabelService?: WorkspaceLabelService,
     workspaceArchiveOperations?: WorkspaceArchiveOperations,
+    orderingService?: OrderingService,
   ) {
     this.logger = logger.child({ module: "websocket-server" });
     this.workspaceSetupRuntime = workspaceSetupRuntime;
@@ -796,6 +800,7 @@ export class VoiceAssistantWebSocketServer {
     this.projectRegistry = projectRegistry ?? createNoopProjectRegistry();
     this.workspaceRegistry = workspaceRegistry ?? createNoopWorkspaceRegistry();
     this.workspaceLabelService = workspaceLabelService ?? null;
+    this.orderingService = orderingService;
     const requiredServices = requireWebSocketServices({
       scheduleService,
       checkoutDiffManager,
@@ -1189,6 +1194,8 @@ export class VoiceAssistantWebSocketServer {
             ? permissions.filter((permission) => connection.permissionCeiling!.includes(permission))
             : permissions,
         );
+        const message = this.createServerInfoMessage(connection.session);
+        for (const socket of connection.sockets) this.sendToClient(socket, message);
       }
     }
   }
@@ -1607,6 +1614,7 @@ export class VoiceAssistantWebSocketServer {
     let connection: SessionConnection | null = null;
 
     const session = this.createSocketSession({
+      principalId: admission.principalId,
       clientId,
       appVersion,
       clientCapabilities,
@@ -1730,6 +1738,9 @@ export class VoiceAssistantWebSocketServer {
       workspaceRegistry: this.workspaceRegistry,
       workspaceBaseBranch: this.workspaceBaseBranch,
       workspaceLabelService: this.workspaceLabelService ?? undefined,
+      ordering: this.orderingService
+        ? { service: this.orderingService, principalId: options.principalId }
+        : undefined,
       directorySync: this.directorySync,
       scheduleService: this.scheduleService,
       checkoutDiffManager: this.checkoutDiffManager,
@@ -2098,6 +2109,7 @@ export class VoiceAssistantWebSocketServer {
         directorySync: true,
         // COMPAT(workspaceLabels): added in v0.5.0, remove after 2027-08-14.
         ...(this.workspaceLabelService ? { workspaceLabels: true } : {}),
+        ...(this.orderingService ? { sharedOrdering: true, sharedOrderingTargets: true } : {}),
         terminalCollection: true,
         // COMPAT(workspaceSetupRun): added in v0.7.3, remove gate after 2027-09-02.
         workspaceSetupRun: true,
