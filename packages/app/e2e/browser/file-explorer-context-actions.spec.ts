@@ -163,6 +163,14 @@ test("creates, renames, copies, and deletes entries through the file explorer", 
     position: { x: emptyAreaBounds!.width / 2, y: emptyAreaBounds!.height - 24 },
   });
   await expect(page.getByTestId("files-empty-area-new-file")).toBeVisible();
+  await shiftDragText(page, page.getByTestId("files-empty-area-new-file"), {
+    start: "New",
+    end: "file",
+  });
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("New file");
+  await expect(page.getByTestId("files-empty-area-new-file")).toBeVisible();
+  await expect(nameInput).toBeHidden();
+
   await page.getByTestId("files-empty-area-new-folder").click();
   await nameInput.fill("folder");
   await nameInput.press("Enter");
@@ -204,6 +212,11 @@ test("creates, renames, copies, and deletes entries through the file explorer", 
   await expect(entry("created.txt")).toHaveCSS("user-select", "none");
   await entry("created.txt").dblclick();
   expect(await page.evaluate(() => window.getSelection()?.toString() ?? "")).toBe("");
+  const fileTab = page.getByTestId("workspace-tabs-row").getByText("created.txt", { exact: true });
+  await expect(fileTab).toBeVisible();
+  await shiftDragText(page, fileTab, { start: "created", end: ".txt" });
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("created.txt");
+  await expect(fileTab).toBeVisible();
 
   const folderRow = entry("folder").locator(
     "xpath=ancestor::*[starts-with(@data-testid, 'file-explorer-row-')][1]",
