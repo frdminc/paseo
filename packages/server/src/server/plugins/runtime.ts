@@ -1009,7 +1009,12 @@ export class PluginRuntime {
                 void send(child, { type: "provider.installation.cancel", requestId }).catch(
                   () => {},
                 );
-              reject(new Error(`Plugin RPC timed out: ${pluginId}.${message.type}`));
+              // RPCs name their method; other requests (hooks, tools, providers) their message type.
+              const operation =
+                message.type === "invoke" || message.type === "subscribe"
+                  ? message.method
+                  : message.type;
+              reject(new Error(`Plugin RPC timed out: ${pluginId}.${operation}`));
             }, timeoutMs);
       signal?.addEventListener("abort", cancel, { once: true });
       loaded.pending.set(requestId, {
