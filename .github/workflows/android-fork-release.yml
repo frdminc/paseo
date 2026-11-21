@@ -55,6 +55,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Tag guards (release runs only)
         if: github.ref_type == 'tag'
@@ -67,7 +68,7 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
             || { echo "::error::tag $TAG is not on main"; exit 1; }
           # fork-android-v<version>-r<build>: take the build number from the tag.
-          [[ "$TAG" =~ ^fork-android-v(.+)-r([0-9]{1,2})$ ]] \
+          [[ "$TAG" =~ ^fork-android-v(.+)-r([1-9][0-9]?)$ ]] \
             || { echo "::error::tag must look like fork-android-v<version>-r<build>"; exit 1; }
           echo "TAG_VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
           echo "PASEO_FORK_BUILD=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
@@ -131,11 +132,11 @@ jobs:
             -x generateReleaseLintModel -x generateReleaseLintVitalModel \
             --no-daemon --max-workers=2 -Dorg.gradle.parallel=false
 
-      - name: Hand the unsigned APK to the release job (1 day, internal)
-        if: github.ref_type == 'tag'
+      - name: Hand the debug-signed APK to the release job (1 day, internal)
+        if: github.ref_type == 'tag' && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
-          name: android-fork-unsigned
+          name: android-fork-debugsigned-DO-NOT-INSTALL
           path: packages/app/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 1
           if-no-files-found: error
@@ -238,7 +239,7 @@ jobs:
   release:
     name: Sign with the release key and publish
     needs: build
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: android-release
@@ -252,14 +253,11 @@ jobs:
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/setup-java@v4
+      # No setup-java here: this job holds the release key, and the runner image already
+      # ships a JDK for apksigner. Actions in this job are pinned to a commit.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          distribution: temurin
-          java-version: "21"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: android-fork-unsigned
+          name: android-fork-debugsigned-DO-NOT-INSTALL
           path: unsigned
 
       - name: Sign with the release key and check the signer
