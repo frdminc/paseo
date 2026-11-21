@@ -22,6 +22,7 @@ The `fork` variant is an installable Android app that sits next to the Play app 
 - **Own version codes.** Set `PASEO_FORK_BUILD=<1..99>`. See [Version codes](#version-codes).
 - **iOS.** The variant sets an iOS bundle ID but nothing builds or supports it.
 - **CI.** `.github/workflows/android-fork-release.yml` builds one `arm64-v8a` APK on Linux and re-signs it with `apksigner`. It never uses upstream's EAS credentials. Obtainium requires the same signing key on every release, so the key is permanent too.
+- **Releasing.** Push a tag `fork-android-v<version>-r<build>` that sits on `main` (for example `fork-android-v0.17.0-beta.1-r1`). Never tag the fork with a plain `v*`: that fires upstream's desktop, docker and deploy workflows. The build job runs with no secrets; the `release` job runs in the `android-release` environment, which needs a reviewer's approval, signs with the release key, refuses any signer digest other than `ANDROID_KEYSTORE_CERT_SHA256`, and publishes one APK plus `SHA256SUMS`. A `workflow_dispatch` run builds a proof APK signed with a throwaway key instead; never install it. Versions with a suffix such as `-beta.1` publish as GitHub prereleases, so Obtainium's beta and stable channels stay separate.
 
 ## Version codes
 
