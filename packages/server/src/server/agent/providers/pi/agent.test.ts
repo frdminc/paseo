@@ -1344,6 +1344,68 @@ describe("PiRpcAgentSession", () => {
     await expect(session.canStopRuntime()).resolves.toBe(true);
   });
 
+  test("clears activeToolCalls on turn end and interrupt so later denials do not steer or block canStopRuntime", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    // Tool starts without tool_execution_end, then the turn completes.
+    await session.startTurn("run tool");
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool-unended-1",
+      toolName: "bash",
+      args: { command: "echo hi" },
+    });
+    fakeSession.finishTurn();
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-after-turn-end",
+      method: "confirm",
+      title: "Continue?",
+    });
+    await session.respondToPermission("ui-after-turn-end", {
+      behavior: "deny",
+      message: "turn already finished",
+    });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-after-turn-end", response: { cancelled: true } },
+    ]);
+    await expect(session.canStopRuntime()).resolves.toBe(true);
+
+    // Tool starts without tool_execution_end, then the turn is interrupted.
+    await session.startTurn("run second tool");
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool-unended-2",
+      toolName: "bash",
+      args: { command: "sleep 10" },
+    });
+    await session.interrupt();
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-after-interrupt",
+      method: "confirm",
+      title: "Continue?",
+    });
+    await session.respondToPermission("ui-after-interrupt", {
+      behavior: "deny",
+      message: "turn already interrupted",
+    });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-after-turn-end", response: { cancelled: true } },
+      { id: "ui-after-interrupt", response: { cancelled: true } },
+    ]);
+    await expect(session.canStopRuntime()).resolves.toBe(true);
+  });
+
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();

@@ -1660,6 +1660,7 @@ export class PiRpcAgentSession implements AgentSession {
         this.activeTurnStartedEmitted = false;
         this.pendingSettledMessages = null;
         this.activeAssistantMessageId = null;
+        this.activeToolCalls.clear();
         this.pendingSteerSubmissions.length = 0;
         this.clearNoTurnBuffers();
         this.emit({
@@ -1684,6 +1685,7 @@ export class PiRpcAgentSession implements AgentSession {
       this.activeTurnStartedEmitted = false;
       this.pendingSettledMessages = null;
       this.activeAssistantMessageId = null;
+      this.activeToolCalls.clear();
       this.pendingSteerSubmissions.length = 0;
       this.clearNoTurnBuffers();
       this.emit({
@@ -2288,6 +2290,7 @@ export class PiRpcAgentSession implements AgentSession {
 
   private handleProcessExit(error: string): void {
     this.runtimeDead = true;
+    this.activeToolCalls.clear();
     this.rejectAllExtensionResults(new Error(error));
     this.interruptingTurn = null;
     if (!this.activeTurnId && !this.activeTurnStarted) {
@@ -2670,6 +2673,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.activeTurnStarted = false;
     this.activeTurnStartedEmitted = false;
     this.pendingSettledMessages = null;
+    this.activeToolCalls.clear();
     this.pendingSteerSubmissions.length = 0;
     this.clearNoTurnBuffers();
     const measured = this.turnMeter.finish(Date.now());
