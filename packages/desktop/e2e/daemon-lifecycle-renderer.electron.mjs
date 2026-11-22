@@ -83,17 +83,22 @@ export async function verifyAttachedDaemonControls({ repo, root, env, home, port
       const rect = range.getBoundingClientRect();
       return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
     });
-    await desktop.evaluate(({ clipboard }) => clipboard.writeText("before-shift-copy"));
-    await page.keyboard.down("Shift");
-    await page.mouse.move(copyBounds.left + 0.1, copyBounds.y);
-    await page.mouse.down();
-    await page.mouse.move(copyBounds.right + 0.1, copyBounds.y, { steps: 12 });
-    await page.mouse.up();
-    await page.keyboard.up("Shift");
-    await expect
-      .poll(() => desktop.evaluate(({ clipboard }) => clipboard.readText()))
-      .toBe("Attached to an existing daemon");
-    await expect(copyLabel).toBeVisible();
+    const savedClipboard = await desktop.evaluate(({ clipboard }) => clipboard.readText());
+    try {
+      await desktop.evaluate(({ clipboard }) => clipboard.writeText("before-shift-copy"));
+      await page.keyboard.down("Shift");
+      await page.mouse.move(copyBounds.left + 0.1, copyBounds.y);
+      await page.mouse.down();
+      await page.mouse.move(copyBounds.right + 0.1, copyBounds.y, { steps: 12 });
+      await page.mouse.up();
+      await page.keyboard.up("Shift");
+      await expect
+        .poll(() => desktop.evaluate(({ clipboard }) => clipboard.readText()))
+        .toBe("Attached to an existing daemon");
+      await expect(copyLabel).toBeVisible();
+    } finally {
+      await desktop.evaluate(({ clipboard }, text) => clipboard.writeText(text), savedClipboard);
+    }
 
     await expect(
       page.getByText("Removes localhost from this device and stops the built-in daemon", {

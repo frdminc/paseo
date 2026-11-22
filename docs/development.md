@@ -38,8 +38,11 @@ needed: copying happens when you release the mouse. A Shift-click without a drag
 does nothing. Ordinary selection and Cmd/Ctrl+C keep their existing behavior.
 
 Inputs, terminal surfaces, dedicated code editors, embedded browser content and
-window controls keep their own interactions. Only rendered text can be copied;
-truncated or unmounted text is unavailable. This gesture requires a mouse and
+window controls keep their own interactions. You get the text in the selected
+range as the browser serializes it, the same as Cmd/Ctrl+C: it can include text
+behind an ellipsis, visually hidden text and small labels such as a Copy button
+inside the range. Text that is not mounted, such as virtualized rows scrolled
+out of view, is not included. This gesture requires a mouse and
 does not change selection on native iOS or Android. Clipboard access requires
 HTTPS, localhost or Electron. A failed write leaves the selection available for
 manual copying and displays an error.
