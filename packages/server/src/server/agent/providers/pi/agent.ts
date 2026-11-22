@@ -1541,6 +1541,10 @@ export class PiRpcAgentSession implements AgentSession {
     throw new Error("Pi does not expose selectable modes");
   }
 
+  private hasLiveAgentLoop(): boolean {
+    return this.activeTurnStarted || this.activeToolCalls.size > 0;
+  }
+
   getPendingPermissions(): AgentPermissionRequest[] {
     return [...this.pendingExtensionUiRequests.values()];
   }
@@ -1570,13 +1574,13 @@ export class PiRpcAgentSession implements AgentSession {
     if (
       steerText &&
       replies.length > 0 &&
-      (this.activeTurnId || this.activeTurnStarted) &&
+      this.hasLiveAgentLoop() &&
       !this.closed &&
       !this.runtimeDead
     ) {
       try {
         await this.runtimeSession.steer(steerText);
-        if (!this.closed && (this.activeTurnId || this.activeTurnStarted)) {
+        if (!this.closed && this.hasLiveAgentLoop()) {
           this.pendingSteerSubmissions.push({ text: steerText, clientMessageId: null });
         }
       } catch (error) {
