@@ -5,7 +5,7 @@ import type {
   AgentStreamEvent,
 } from "../../../agent-sdk-types.js";
 import type { PiAgentMessage } from "../rpc-types.js";
-import { PiPermissionResponseError } from "../permission-response.js";
+import { PiPermissionResponseError } from "../extension-ui-answer.js";
 import { mapPiChildSession, PiChildSessionFollower } from "./child-session.js";
 import type {
   PiExtension,
