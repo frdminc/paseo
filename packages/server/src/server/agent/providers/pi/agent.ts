@@ -1549,22 +1549,35 @@ export class PiRpcAgentSession implements AgentSession {
       !this.closed &&
       !this.runtimeDead
     ) {
+      const expectedTurnId = this.activeTurnId;
+      const submission: PiPendingSteerSubmission = { text: steerText, clientMessageId: null };
+      const removeSubmission = () => {
+        const index = this.pendingSteerSubmissions.indexOf(submission);
+        if (index >= 0) {
+          this.pendingSteerSubmissions.splice(index, 1);
+        }
+      };
+      // Register before awaiting so that a timed-out steer whose frame already reached Pi's stdin
+      // still correlates with clientMessageId: null instead of hijacking the original prompt row.
+      this.pendingSteerSubmissions.push(submission);
       try {
         await this.runtimeSession.steer(
           steerText,
           undefined,
           PI_PERMISSION_DENIAL_STEER_TIMEOUT_MS,
         );
-        if (!this.closed && this.hasLiveAgentLoop()) {
-          this.pendingSteerSubmissions.push({ text: steerText, clientMessageId: null });
-        }
       } catch (error) {
-        if (!isPiDefinitiveSteerRejection(error)) {
+        if (isPiDefinitiveSteerRejection(error)) {
+          removeSubmission();
+        } else {
           this.logger.warn(
             { err: error, requestId },
             "Failed to steer Pi denial reason before cancelling dialog",
           );
         }
+      }
+      if (this.closed || !this.hasLiveAgentLoop() || this.activeTurnId !== expectedTurnId) {
+        removeSubmission();
       }
     }
 
