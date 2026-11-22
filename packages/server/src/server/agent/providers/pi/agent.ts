@@ -130,6 +130,7 @@ const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
 const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PI_RPC_TIMEOUT_MS = 60_000;
+const PI_PERMISSION_DENIAL_STEER_TIMEOUT_MS = 5_000;
 const MAX_STEERED_DENIAL_REASON_CHARS = 2048;
 const STEER_CLEARED_PERMISSION_MESSAGE =
   "The user answered with a message instead of approving. Their message follows.";
@@ -1555,7 +1556,11 @@ export class PiRpcAgentSession implements AgentSession {
       !this.runtimeDead
     ) {
       try {
-        await this.runtimeSession.steer(steerText);
+        await this.runtimeSession.steer(
+          steerText,
+          undefined,
+          PI_PERMISSION_DENIAL_STEER_TIMEOUT_MS,
+        );
         if (!this.closed && this.hasLiveAgentLoop()) {
           this.pendingSteerSubmissions.push({ text: steerText, clientMessageId: null });
         }

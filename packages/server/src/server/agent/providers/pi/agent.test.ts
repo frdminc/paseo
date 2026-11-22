@@ -1175,6 +1175,48 @@ describe("PiRpcAgentSession", () => {
     ]);
   });
 
+  test("bounds denial-reason steer with a 5 s timeout and still sends cancel on timeout", async () => {
+    const pi = new FakePi();
+    const logger = pino({ level: "silent" });
+    const warnSpy = vi.spyOn(logger, "warn");
+    const client = new PiRpcAgentClient({ logger, runtime: pi });
+    const session = await client.createSession(createConfig());
+    const resolvedEvents: AgentStreamEvent[] = [];
+    session.subscribe((event) => {
+      if (event.type === "permission_resolved") resolvedEvents.push(event);
+    });
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("work");
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-steer-timeout",
+      method: "confirm",
+      title: "Continue?",
+    });
+    fakeSession.steerError = new Error("Pi RPC request 'steer' timed out after 5000ms");
+
+    await session.respondToPermission("ui-steer-timeout", {
+      behavior: "deny",
+      message: "do not proceed",
+    });
+
+    expect(fakeSession.steerTimeouts).toEqual([5_000]);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-steer-timeout", response: { cancelled: true } },
+    ]);
+    expect(resolvedEvents).toEqual([
+      expect.objectContaining({
+        type: "permission_resolved",
+        requestId: "ui-steer-timeout",
+        resolution: { behavior: "deny", message: "do not proceed" },
+      }),
+    ]);
+    await session.close();
+  });
+
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();

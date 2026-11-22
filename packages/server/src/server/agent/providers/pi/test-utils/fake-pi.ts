@@ -134,6 +134,7 @@ export class FakePiSession implements PiRuntimeSession {
   readonly environment: Record<string, string>;
   readonly prompts: Array<{ message: string; imageCount: number }> = [];
   readonly steerCalls: Array<{ message: string; imageCount: number }> = [];
+  readonly steerTimeouts: Array<number | null | undefined> = [];
   steerError: Error | null = null;
   steerCompletion: Promise<void> | null = null;
   readonly rpcCallOrder: Array<"steer" | "extension_ui_response"> = [];
@@ -259,9 +260,11 @@ export class FakePiSession implements PiRuntimeSession {
   async steer(
     message: string,
     images?: Array<{ type: "image"; data: string; mimeType: string }>,
+    timeoutMs?: number | null,
   ): Promise<void> {
     this.rpcCallOrder.push("steer");
     this.steerCalls.push({ message, imageCount: images?.length ?? 0 });
+    this.steerTimeouts.push(timeoutMs);
     await this.steerCompletion;
     if (this.steerError) {
       throw this.steerError;
