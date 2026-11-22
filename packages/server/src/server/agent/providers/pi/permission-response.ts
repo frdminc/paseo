@@ -8,6 +8,7 @@ export const QUESTION_RESPONSE_HEADER = "Response";
 // Caps on caller- and extension-supplied text echoed into a rejected-allow error.
 export const MAX_ECHOED_LABELS = 20;
 export const MAX_ECHOED_CHARS = 80;
+const SAFE_CLI_HEADER_PATTERN = /^[A-Za-z0-9 _-]+$/;
 
 export class PiPermissionResponseError extends Error {
   constructor(message: string) {
@@ -63,6 +64,18 @@ function formatEchoedText(text: string): string {
   return truncated ? `${shown}...` : shown;
 }
 
+function shellSingleQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function formatAnswersHint(header: string): string {
+  if (!SAFE_CLI_HEADER_PATTERN.test(header)) {
+    return "updatedInput.answers";
+  }
+  const payload = JSON.stringify({ answers: { [header]: "<answer>" } });
+  return `updatedInput.answers (CLI: --input ${shellSingleQuote(payload)})`;
+}
+
 // An allow must name the option it picks: `updatedInput.answers`, or `selectedActionId` equal to an
 // offered label. Throwing (before the request is consumed) beats answering a human approval with a
 // cancellation, which Pi extensions report to the agent as "the user denied this".
@@ -89,7 +102,7 @@ export function resolveAllowedExtensionUiAnswer(
     options?.answerHeader ??
     optionalString(request.metadata?.answerHeader) ??
     QUESTION_RESPONSE_HEADER;
-  const viaAnswers = `updatedInput.answers (CLI: --input '{"answers":{"${header}":"<answer>"}}')`;
+  const viaAnswers = formatAnswersHint(header);
   const shown = labels.slice(0, MAX_ECHOED_LABELS).map(formatEchoedText);
   const more = labels.length > shown.length ? ` and ${labels.length - shown.length} more` : "";
   const hint =
