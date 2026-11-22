@@ -1175,19 +1175,19 @@ describe("PiRpcAgentSession", () => {
     ]);
   });
 
-  test("bounds denial-reason steer with a 5 s timeout and still sends cancel on timeout", async () => {
+  test("bounds denial-reason steer with a 5 s timeout, keeps the denial row visible after timeout, and splices out on definitive rejection", async () => {
     const pi = new FakePi();
     const logger = pino({ level: "silent" });
     const warnSpy = vi.spyOn(logger, "warn");
     const client = new PiRpcAgentClient({ logger, runtime: pi });
     const session = await client.createSession(createConfig());
-    const resolvedEvents: AgentStreamEvent[] = [];
+    const events: AgentStreamEvent[] = [];
     session.subscribe((event) => {
-      if (event.type === "permission_resolved") resolvedEvents.push(event);
+      events.push(event);
     });
     const fakeSession = pi.latestSession();
 
-    await session.startTurn("work");
+    await session.startTurn("work", { clientMessageId: "client-initial-timeout" });
     fakeSession.emit({ type: "agent_start" });
     fakeSession.emit({
       type: "extension_ui_request",
@@ -1207,13 +1207,49 @@ describe("PiRpcAgentSession", () => {
     expect(fakeSession.extensionUiResponses).toEqual([
       { id: "ui-steer-timeout", response: { cancelled: true } },
     ]);
-    expect(resolvedEvents).toEqual([
+    expect(events).toContainEqual(
       expect.objectContaining({
         type: "permission_resolved",
         requestId: "ui-steer-timeout",
         resolution: { behavior: "deny", message: "do not proceed" },
       }),
-    ]);
+    );
+
+    // Pi may still read the timed-out steer from stdin; the marker must emit without
+    // inheriting the original prompt's clientMessageId so the denial row stays visible.
+    const timedOutSteerText = fakeSession.steerCalls[0]?.message ?? "";
+    fakeSession.finishSubmittedUserMessage({
+      id: "entry-after-timeout",
+      parentId: null,
+      text: timedOutSteerText,
+    });
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "timeline",
+        item: {
+          type: "user_message",
+          text: timedOutSteerText,
+          messageId: "entry-after-timeout",
+        },
+      }),
+    );
+
+    // Definitive rejection ("Unknown command: steer") splices the entry back out so
+    // pendingSteerSubmissions does not block idle runtime eviction.
+    fakeSession.finishTurn();
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-definitive-reject",
+      method: "confirm",
+      title: "Continue?",
+    });
+    fakeSession.steerError = new Error("Unknown command: steer");
+    await session.respondToPermission("ui-definitive-reject", {
+      behavior: "deny",
+      message: "legacy pi cannot steer",
+    });
+    await expect(session.canStopRuntime()).resolves.toBe(true);
     await session.close();
   });
 
