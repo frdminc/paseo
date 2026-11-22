@@ -87,9 +87,11 @@ import {
   type PiExtensionEventOutput,
 } from "./extensions/index.js";
 import {
+  isRecord,
+  optionalString,
   QUESTION_RESPONSE_HEADER,
   resolveAllowedExtensionUiAnswer,
-} from "./permission-response.js";
+} from "./extension-ui-answer.js";
 import { resolveResumeProcessCwd } from "../resume-process-cwd.js";
 import { revertPiConversation } from "./rewind.js";
 import {
@@ -893,14 +895,6 @@ function latestPiErrorMessage(messages: PiAgentMessage[]): string | null {
 function isPiAbortedTerminalResponse(messages: PiAgentMessage[]): boolean {
   const latestAssistant = messages.findLast((message) => message.role === "assistant");
   return latestAssistant?.stopReason?.toLowerCase() === "aborted";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 function toNotificationLevel(value: unknown): "info" | "warning" | "error" {

@@ -8,7 +8,7 @@ import type { PiExtension, PiExtensionDialog, PiExtensionUiReply } from "../cont
 import {
   QUESTION_RESPONSE_HEADER,
   resolveAllowedExtensionUiAnswer,
-} from "../../permission-response.js";
+} from "../../extension-ui-answer.js";
 
 const QUESTION_COMMENT_HEADER = "Comment";
 const FREEFORM_SENTINEL = "✏️ Type custom response...";
