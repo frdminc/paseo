@@ -16,7 +16,7 @@ import path from "node:path";
 import pino from "pino";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { describe, expect, onTestFinished, test } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 
 import type { AgentSession, AgentSessionConfig, AgentStreamEvent } from "../../agent-sdk-types.js";
 import { PiProviderOptionsSchema, PiRpcAgentClient, PiRpcAgentSession } from "./agent.js";
@@ -906,6 +906,152 @@ describe("PiRpcAgentSession", () => {
     expect(fakeSession.extensionUiResponses).toEqual([
       { id: "ui-cancel", response: { cancelled: true } },
     ]);
+  });
+
+  test("steers a user denial reason before cancelling and records null clientMessageId", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("write file", { clientMessageId: "client-initial-1" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-deny-reason",
+      method: "select",
+      title: "Allow write?",
+      options: ["Yes", "No"],
+    });
+    await events.nextPermissionRequest();
+
+    let releaseSteer!: () => void;
+    fakeSession.steerCompletion = new Promise<void>((resolve) => {
+      releaseSteer = resolve;
+    });
+
+    const respondPromise = session.respondToPermission("ui-deny-reason", {
+      behavior: "deny",
+      message: "  use a scratch path instead  ",
+    });
+    await waitForImmediate();
+
+    // Cancel must wait until steer settles so Pi does not advance the turn first.
+    expect(fakeSession.steerCalls).toEqual([
+      { message: "Reason given for the denial: use a scratch path instead", imageCount: 0 },
+    ]);
+    expect(fakeSession.extensionUiResponses).toEqual([]);
+
+    releaseSteer();
+    await respondPromise;
+
+    expect(fakeSession.rpcCallOrder).toEqual(["steer", "extension_ui_response"]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-deny-reason", response: { cancelled: true } },
+    ]);
+    await expect(events.nextPermissionResolution()).resolves.toMatchObject({
+      requestId: "ui-deny-reason",
+      resolution: { behavior: "deny", message: "  use a scratch path instead  " },
+    });
+
+    fakeSession.finishSubmittedUserMessage({
+      id: "entry-deny-steer",
+      parentId: null,
+      text: "Reason given for the denial: use a scratch path instead",
+    });
+    expect(events.timelineItems()).toContainEqual({
+      type: "user_message",
+      text: "Reason given for the denial: use a scratch path instead",
+      messageId: "entry-deny-steer",
+    });
+  });
+
+  test("skips denial steer for fixed Paseo messages, blank messages, interrupt, and allow", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+    await session.startTurn("work");
+
+    const skippedDenials = [
+      { behavior: "deny" as const },
+      { behavior: "deny" as const, message: "   " },
+      { behavior: "deny" as const, message: "Denied by user" },
+      { behavior: "deny" as const, message: "Dismissed by user" },
+      { behavior: "deny" as const, message: "Permission request denied" },
+      { behavior: "deny" as const, message: "Permission request canceled" },
+      { behavior: "deny" as const, message: "Interrupted" },
+      { behavior: "deny" as const, message: "Removed by rewind" },
+      {
+        behavior: "deny" as const,
+        message: "The user answered with a message instead of approving. Their message follows.",
+      },
+      { behavior: "deny" as const, message: "stop right now", interrupt: true },
+    ];
+
+    for (const [index, response] of skippedDenials.entries()) {
+      const id = `ui-skip-${index}`;
+      fakeSession.emit({
+        type: "extension_ui_request",
+        id,
+        method: "confirm",
+        title: "Continue?",
+      });
+      await session.respondToPermission(id, response);
+    }
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-allow",
+      method: "select",
+      title: "Pick",
+      options: ["Yes", "No"],
+    });
+    await session.respondToPermission("ui-allow", { behavior: "allow", selectedActionId: "Yes" });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toHaveLength(skippedDenials.length + 1);
+  });
+
+  test("swallows Unknown command: steer and logs other steer failures while still cancelling", async () => {
+    const pi = new FakePi();
+    const logger = pino({ level: "silent" });
+    const warnSpy = vi.spyOn(logger, "warn");
+    const client = new PiRpcAgentClient({ logger, runtime: pi });
+    const session = await client.createSession(createConfig());
+    const fakeSession = pi.latestSession();
+    await session.startTurn("work");
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-legacy-pi",
+      method: "confirm",
+      title: "Continue?",
+    });
+    fakeSession.steerError = new Error("Unknown command: steer");
+    await session.respondToPermission("ui-legacy-pi", {
+      behavior: "deny",
+      message: "prefer read-only check",
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-legacy-pi", response: { cancelled: true } },
+    ]);
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-steer-error",
+      method: "confirm",
+      title: "Continue?",
+    });
+    fakeSession.steerError = new Error("Pi RPC socket closed");
+    await session.respondToPermission("ui-steer-error", {
+      behavior: "deny",
+      message: "do not overwrite fixtures",
+    });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-legacy-pi", response: { cancelled: true } },
+      { id: "ui-steer-error", response: { cancelled: true } },
+    ]);
+    await session.close();
   });
 
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
