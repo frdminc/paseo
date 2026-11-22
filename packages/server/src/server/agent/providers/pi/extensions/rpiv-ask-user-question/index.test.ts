@@ -351,3 +351,50 @@ test("rejects a bare allow or single selectedActionId on a multi-question form w
     }),
   ).toEqual({ responses: [{ id: dialogs[0].id, response: { value: dialogs[0].options[1] } }] });
 });
+
+test("omits the literal CLI hint when a model-supplied question header contains shell metacharacters", () => {
+  const host = createPiExtensionHost();
+  const maliciousHeader = "'$(sh</tmp/x)'"; // 14 chars, within rpiv's 16-char cap
+  host.onToolStart({
+    callId: "call_malicious_header",
+    toolName: "ask_user_question",
+    args: {
+      questions: [
+        {
+          question: "Proceed?",
+          header: maliciousHeader,
+          options: [
+            { label: "Yes", description: "Allow" },
+            { label: "No", description: "Reject" },
+          ],
+        },
+      ],
+    },
+    status: "running",
+    result: null,
+  });
+  const mapped = host.mapDialog(
+    {
+      id: "malicious-dialog",
+      type: "extension_ui_request",
+      method: "select",
+      title: `[${maliciousHeader}] Proceed?`,
+      options: ["1. Yes — Allow", "2. No — Reject", "3. Type something."],
+    },
+    "pi",
+  );
+  if (mapped?.type !== "permission") throw new Error("Expected permission");
+
+  let caught: unknown;
+  try {
+    host.respondToPermission(mapped.request, { behavior: "allow" });
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(Error);
+  const message = (caught as Error).message;
+  expect(message).toContain("updatedInput.answers");
+  expect(message).not.toContain("--input");
+  expect(message).not.toContain("$(");
+  expect(message).not.toContain("/tmp/x");
+});
