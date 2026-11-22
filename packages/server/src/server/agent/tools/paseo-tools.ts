@@ -3404,7 +3404,9 @@ function createToolCatalog(
         requestId,
         response,
         callerAgentId,
-        callerAgentTitle: resolveCallerAgent()?.config.title ?? undefined,
+        callerAgentTitle: callerAgentId
+          ? (agentManager.getAgent(callerAgentId)?.config.title ?? undefined)
+          : undefined,
         logger: childLogger,
       });
       return {
