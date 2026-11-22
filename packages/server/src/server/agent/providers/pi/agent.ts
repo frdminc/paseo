@@ -1088,6 +1088,51 @@ function firstPermissionAnswer(input: AgentMetadata | undefined): string | null 
   return typeof first === "string" ? first : null;
 }
 
+function offeredQuestionLabels(request: AgentPermissionRequest): string[] {
+  const questions = isRecord(request.input) ? request.input.questions : undefined;
+  if (!Array.isArray(questions)) {
+    return [];
+  }
+  const labels: string[] = [];
+  for (const question of questions) {
+    const options = isRecord(question) ? question.options : undefined;
+    if (!Array.isArray(options)) continue;
+    for (const option of options) {
+      if (isRecord(option) && typeof option.label === "string") {
+        labels.push(option.label);
+      }
+    }
+  }
+  return labels;
+}
+
+// An allow must name the option it picks: `updatedInput.answers`, or `selectedActionId` equal to an
+// offered label. Throwing (before the request is consumed) beats answering a human approval with a
+// cancellation, which Pi extensions report to the agent as "the user denied this".
+function resolveAllowedExtensionUiAnswer(
+  request: AgentPermissionRequest,
+  response: Extract<AgentPermissionResponse, { behavior: "allow" }>,
+): string {
+  const answer = firstPermissionAnswer(response.updatedInput);
+  if (answer !== null) {
+    return answer;
+  }
+  const labels = offeredQuestionLabels(request);
+  const selected = response.selectedActionId;
+  if (selected !== undefined && labels.includes(selected)) {
+    return selected;
+  }
+  const reason =
+    selected !== undefined
+      ? `selectedActionId '${selected}' is not an offered option`
+      : "an allow response must name the option it picks";
+  const hint =
+    labels.length > 0
+      ? `set selectedActionId to one of: ${labels.map((label) => `'${label}'`).join(", ")}, or pass updatedInput.answers`
+      : "pass updatedInput.answers";
+  throw new Error(`Pi permission request '${request.id}': ${reason}; ${hint}`);
+}
+
 function buildExtensionUiResponse(
   request: AgentPermissionRequest,
   response: AgentPermissionResponse,
@@ -1097,10 +1142,7 @@ function buildExtensionUiResponse(
   }
 
   const method = optionalString(request.metadata?.extensionUiMethod);
-  const answer = firstPermissionAnswer(response.updatedInput);
-  if (answer === null) {
-    return { cancelled: true };
-  }
+  const answer = resolveAllowedExtensionUiAnswer(request, response);
 
   if (method === "confirm") {
     return { confirmed: /^yes$/i.test(answer.trim()) };
@@ -1516,12 +1558,15 @@ export class PiRpcAgentSession implements AgentSession {
     if (!request) {
       throw new Error(`No pending permission request with id '${requestId}'`);
     }
-    this.pendingExtensionUiRequests.delete(requestId);
 
+    // Resolve every reply before consuming the request, so an answer that cannot be delivered
+    // leaves the request pending and answerable.
     const mapped = this.extensionHost.respondToPermission(request, response);
-    for (const reply of mapped?.responses ?? [
+    const replies = mapped?.responses ?? [
       { id: requestId, response: buildExtensionUiResponse(request, response) },
-    ]) {
+    ];
+    this.pendingExtensionUiRequests.delete(requestId);
+    for (const reply of replies) {
       this.runtimeSession.respondToExtensionUiRequest(reply.id, reply.response);
     }
     this.emit({
