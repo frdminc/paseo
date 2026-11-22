@@ -363,12 +363,18 @@ async function selectWorkspaceSort(
   // Dnd-kit's pointer sensor deliberately suppresses clicks for 50ms after a drop.
   // Open through the trigger's keyboard interaction, including immediately after a drag.
   await page.getByLabel("Display preferences", { exact: true }).press("Enter");
-  await page.getByRole("menuitem", { name: /^Sort/ }).press("Enter");
-  await page.getByRole("menuitem", { name, exact: true }).press("Enter");
   if (options?.compact) {
+    await page.getByRole("menuitem", { name: /^Sort/ }).press("Enter");
+    await page.getByRole("menuitem", { name, exact: true }).press("Enter");
     await tapSheetBackdrop(page);
     await expect(page.getByRole("button", { name: "Bottom sheet backdrop" })).toHaveCount(0);
+    return;
   }
+  // On the desktop popover an Enter sent straight after the Sort flyout opens raced the flyout's
+  // own first-row focus in CI and picked Manual instead of the row asked for. A click picks the
+  // row under the pointer whatever has focus.
+  await page.getByRole("menuitem", { name: /^Sort/ }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
 }
 
 async function reconnectSidebar(page: Page): Promise<void> {
