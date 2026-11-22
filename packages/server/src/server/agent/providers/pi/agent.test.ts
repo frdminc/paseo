@@ -1217,6 +1217,97 @@ describe("PiRpcAgentSession", () => {
     await session.close();
   });
 
+  test("does not steer a denial reason when the session is closed", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("work");
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-closed",
+      method: "confirm",
+      title: "Continue?",
+    });
+    await session.close();
+
+    await session.respondToPermission("ui-closed", {
+      behavior: "deny",
+      message: "session already closed",
+    });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-closed", response: { cancelled: true } },
+    ]);
+  });
+
+  test("does not steer a denial reason when the runtime is dead", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool-dead-1",
+      toolName: "bash",
+      args: { command: "echo hi" },
+    });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-dead",
+      method: "confirm",
+      title: "Continue?",
+    });
+    fakeSession.emit({ type: "process_exit", error: "exited unexpectedly" });
+
+    await session.respondToPermission("ui-dead", {
+      behavior: "deny",
+      message: "runtime already dead",
+    });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-dead", response: { cancelled: true } },
+    ]);
+  });
+
+  test("does not record pendingSteerSubmissions when the turn ends during denial-reason steer", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("work");
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-turn-ended",
+      method: "confirm",
+      title: "Continue?",
+    });
+
+    let releaseSteer!: () => void;
+    fakeSession.steerCompletion = new Promise<void>((resolve) => {
+      releaseSteer = resolve;
+    });
+
+    const respondPromise = session.respondToPermission("ui-turn-ended", {
+      behavior: "deny",
+      message: "use another command",
+    });
+    await waitForImmediate();
+
+    // Turn settles while steer is still awaiting acknowledgement.
+    fakeSession.finishTurn();
+    releaseSteer();
+    await respondPromise;
+
+    expect(fakeSession.steerCalls).toHaveLength(1);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-turn-ended", response: { cancelled: true } },
+    ]);
+    // A stray push into pendingSteerSubmissions would permanently block idle eviction.
+    await expect(session.canStopRuntime()).resolves.toBe(true);
+  });
+
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();

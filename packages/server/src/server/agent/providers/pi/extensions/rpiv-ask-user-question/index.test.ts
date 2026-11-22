@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { expect, test } from "vitest";
 import pino from "pino";
 import { PiRpcAgentClient } from "../../agent.js";
@@ -397,4 +398,83 @@ test("omits the literal CLI hint when a model-supplied question header contains 
   expect(message).not.toContain("--input");
   expect(message).not.toContain("$(");
   expect(message).not.toContain("/tmp/x");
+});
+
+test("steers a denial reason before cancelling a multi-question rpiv form", async () => {
+  const pi = new FakePi();
+  const client = new PiRpcAgentClient({ logger: pino({ level: "silent" }), runtime: pi });
+  const session = await client.createSession({
+    provider: "pi",
+    cwd: "/tmp/paseo-pi-rpiv-deny-steer-test",
+  });
+  const runtime = pi.latestSession();
+
+  await session.startTurn("ask");
+  runtime.emit({ type: "agent_start" });
+  runtime.emit(start);
+  runtime.emit(dialogs[0]);
+  const [permission] = session.getPendingPermissions();
+
+  let releaseSteer!: () => void;
+  runtime.steerCompletion = new Promise<void>((resolve) => {
+    releaseSteer = resolve;
+  });
+
+  const respondPromise = session.respondToPermission(permission.id, {
+    behavior: "deny",
+    message: "pick sensible defaults without asking",
+  });
+  await waitForImmediate();
+
+  expect(runtime.steerCalls).toHaveLength(1);
+  expect(runtime.steerCalls[0]?.message).toContain("pick sensible defaults without asking");
+  expect(runtime.extensionUiResponses).toEqual([]);
+
+  releaseSteer();
+  await respondPromise;
+
+  expect(runtime.rpcCallOrder).toEqual(["steer", "extension_ui_response"]);
+  expect(runtime.extensionUiResponses).toEqual([
+    { id: dialogs[0].id, response: { cancelled: true } },
+  ]);
+  for (const dialog of dialogs.slice(1)) runtime.emit(dialog);
+  expect(runtime.steerCalls).toHaveLength(1);
+  expect(runtime.extensionUiResponses).toEqual(
+    dialogs.map((dialog: { id: string }) => ({ id: dialog.id, response: { cancelled: true } })),
+  );
+  await session.close();
+});
+
+test("does not steer a denial reason for a stale rpiv form whose tool already ended", async () => {
+  const pi = new FakePi();
+  const client = new PiRpcAgentClient({ logger: pino({ level: "silent" }), runtime: pi });
+  const session = await client.createSession({
+    provider: "pi",
+    cwd: "/tmp/paseo-pi-rpiv-stale-deny-test",
+  });
+  const runtime = pi.latestSession();
+
+  await session.startTurn("ask");
+  runtime.emit({ type: "agent_start" });
+  runtime.emit(start);
+  runtime.emit(dialogs[0]);
+  const [permission] = session.getPendingPermissions();
+
+  // Tool ends before the user dismisses the stale card; adapter returns { responses: [] }.
+  runtime.emit({
+    type: "tool_execution_end",
+    toolCallId: start.toolCallId,
+    toolName: start.toolName,
+    result: { content: [], details: { cancelled: true, answers: [] } },
+    isError: false,
+  });
+
+  await session.respondToPermission(permission.id, {
+    behavior: "deny",
+    message: "stale dismissal should not steer",
+  });
+
+  expect(runtime.steerCalls).toEqual([]);
+  expect(runtime.extensionUiResponses).toEqual([]);
+  await session.close();
 });
