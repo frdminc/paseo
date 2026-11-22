@@ -128,6 +128,18 @@ const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
 const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PI_RPC_TIMEOUT_MS = 60_000;
+const STEER_CLEARED_PERMISSION_MESSAGE =
+  "The user answered with a message instead of approving. Their message follows.";
+// Fixed internal / UI dismissal strings that carry no user-authored denial reason to steer.
+const FIXED_PERMISSION_DENY_MESSAGES = new Set([
+  "Denied by user",
+  "Dismissed by user",
+  "Permission request denied",
+  "Permission request canceled",
+  "Interrupted",
+  "Removed by rewind",
+  STEER_CLEARED_PERMISSION_MESSAGE,
+]);
 
 export const PiProviderOptionsSchema = z
   .object({
@@ -1079,6 +1091,17 @@ function buildExtensionUiQuestionPermission(
   };
 }
 
+function denialReasonToSteer(response: AgentPermissionResponse): string | null {
+  if (response.behavior !== "deny" || response.interrupt) {
+    return null;
+  }
+  const reason = response.message?.trim();
+  if (!reason || FIXED_PERMISSION_DENY_MESSAGES.has(reason)) {
+    return null;
+  }
+  return `Reason given for the denial: ${reason}`;
+}
+
 function buildExtensionUiResponse(
   request: AgentPermissionRequest,
   response: AgentPermissionResponse,
@@ -1413,7 +1436,7 @@ export class PiRpcAgentSession implements AgentSession {
       if (!this.pendingExtensionUiRequests.has(requestId)) continue;
       await this.respondToPermission(requestId, {
         behavior: "deny",
-        message: "The user answered with a message instead of approving. Their message follows.",
+        message: STEER_CLEARED_PERMISSION_MESSAGE,
       });
     }
   }
@@ -1492,6 +1515,33 @@ export class PiRpcAgentSession implements AgentSession {
       { id: requestId, response: buildExtensionUiResponse(request, response) },
     ];
     this.pendingExtensionUiRequests.delete(requestId);
+
+    // Pi's extension_ui_response cancel carries no reason field. Steer the user-supplied reason
+    // BEFORE cancelling while Pi is still parked inside tool execution, so the steering queue
+    // holds it deterministically before the next LLM turn runs.
+    const steerText = denialReasonToSteer(response);
+    if (
+      steerText &&
+      replies.length > 0 &&
+      (this.activeTurnId || this.activeTurnStarted) &&
+      !this.closed &&
+      !this.runtimeDead
+    ) {
+      try {
+        await this.runtimeSession.steer(steerText);
+        if (!this.closed && (this.activeTurnId || this.activeTurnStarted)) {
+          this.pendingSteerSubmissions.push({ text: steerText, clientMessageId: null });
+        }
+      } catch (error) {
+        if (!isPiDefinitiveSteerRejection(error)) {
+          this.logger.warn(
+            { err: error, requestId },
+            "Failed to steer Pi denial reason before cancelling dialog",
+          );
+        }
+      }
+    }
+
     for (const reply of replies) {
       this.runtimeSession.respondToExtensionUiRequest(reply.id, reply.response);
     }
