@@ -222,7 +222,7 @@ function isInsideDirectory(candidate: string, dir: string): boolean {
 }
 
 /**
- * Whether the shared or Claude skill directory is a symlink that resolves outside
+ * Whether an install-root skill directory is a symlink that resolves outside
  * every skill root, such as a user's own checkout linked into ~/.claude/skills.
  * Paseo did not create that directory, and writing to it edits the user's files.
  * A link between Paseo's own roots, or a dangling link, does not count.
@@ -231,11 +231,11 @@ export async function isLinkedFromOutsideSkillRoots(
   skillName: string,
   targets: RemoveSkillTargets,
 ): Promise<boolean> {
-  const roots = [targets.agentsDir, targets.claudeDir, targets.codexDir];
+  const roots = [...targets.installDirs, targets.codexDir];
   const realRoots = await Promise.all(
     roots.map((root) => fs.realpath(root).catch(() => path.resolve(root))),
   );
-  for (const root of [targets.agentsDir, targets.claudeDir]) {
+  for (const root of targets.installDirs) {
     const skillDir = path.join(root, skillName);
     const info = await fs.lstat(skillDir).catch(() => null);
     if (!info?.isSymbolicLink()) continue;
