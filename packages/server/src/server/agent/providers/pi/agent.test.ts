@@ -1406,6 +1406,39 @@ describe("PiRpcAgentSession", () => {
     await expect(session.canStopRuntime()).resolves.toBe(true);
   });
 
+  test("clears activeToolCalls when prompt RPC rejects so later denials do not steer", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    fakeSession.holdNextPrompt();
+    await session.startTurn("run tool");
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool-prompt-fail",
+      toolName: "bash",
+      args: { command: "echo hi" },
+    });
+    await fakeSession.failHeldPrompt(new Error("Pi RPC request 'prompt' aborted"));
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-after-prompt-fail",
+      method: "confirm",
+      title: "Continue?",
+    });
+    await session.respondToPermission("ui-after-prompt-fail", {
+      behavior: "deny",
+      message: "prompt already failed",
+    });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-after-prompt-fail", response: { cancelled: true } },
+    ]);
+    await expect(session.canStopRuntime()).resolves.toBe(true);
+  });
+
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();
