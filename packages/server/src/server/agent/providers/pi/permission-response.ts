@@ -57,6 +57,12 @@ export interface ResolveAllowedExtensionUiAnswerOptions {
   answerHeader?: string;
 }
 
+function formatEchoedText(text: string): string {
+  const truncated = text.length > MAX_ECHOED_CHARS;
+  const shown = JSON.stringify(truncated ? text.slice(0, MAX_ECHOED_CHARS) : text);
+  return truncated ? `${shown}...` : shown;
+}
+
 // An allow must name the option it picks: `updatedInput.answers`, or `selectedActionId` equal to an
 // offered label. Throwing (before the request is consumed) beats answering a human approval with a
 // cancellation, which Pi extensions report to the agent as "the user denied this".
@@ -77,14 +83,14 @@ export function resolveAllowedExtensionUiAnswer(
   }
   const reason =
     selected !== undefined
-      ? `selectedActionId ${JSON.stringify(selected.slice(0, MAX_ECHOED_CHARS))} is not an offered option`
+      ? `selectedActionId ${formatEchoedText(selected)} is not an offered option`
       : "an allow response must name the option it picks";
   const header =
     options?.answerHeader ??
     optionalString(request.metadata?.answerHeader) ??
     QUESTION_RESPONSE_HEADER;
   const viaAnswers = `updatedInput.answers (CLI: --input '{"answers":{"${header}":"<answer>"}}')`;
-  const shown = labels.slice(0, MAX_ECHOED_LABELS).map((label) => JSON.stringify(label));
+  const shown = labels.slice(0, MAX_ECHOED_LABELS).map(formatEchoedText);
   const more = labels.length > shown.length ? ` and ${labels.length - shown.length} more` : "";
   const hint =
     labels.length > 0
