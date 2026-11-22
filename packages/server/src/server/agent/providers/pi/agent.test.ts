@@ -517,6 +517,71 @@ describe("PiRpcAgentSession", () => {
     });
     await expect(session.close()).resolves.toBeUndefined();
   });
+  test("answers a Pi select with selectedActionId when it names an offered label", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-1",
+      method: "select",
+      title: "Allow bash?",
+      options: ["Yes", "No"],
+    });
+
+    await session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Yes" });
+
+    expect(fakeSession.extensionUiResponses).toEqual([{ id: "ui-1", response: { value: "Yes" } }]);
+    expect(session.getPendingPermissions()).toEqual([]);
+  });
+
+  test("answers a Pi confirm approved by selectedActionId as confirmed", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-1",
+      method: "confirm",
+      title: "Authorize",
+      message: "Run it?",
+    });
+
+    await session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Yes" });
+
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-1", response: { confirmed: true } },
+    ]);
+  });
+
+  test("rejects an undeliverable Pi allow and keeps the request pending for a corrected retry", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-1",
+      method: "select",
+      title: "Allow bash?",
+      options: ["Yes", "No"],
+    });
+
+    await expect(
+      session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Sure" }),
+    ).rejects.toThrow(/'Yes', 'No'/);
+    await expect(session.respondToPermission("ui-1", { behavior: "allow" })).rejects.toThrow(
+      /must name the option/,
+    );
+    expect(fakeSession.extensionUiResponses).toEqual([]);
+    expect(session.getPendingPermissions()).toHaveLength(1);
+
+    await session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Yes" });
+    expect(fakeSession.extensionUiResponses).toEqual([{ id: "ui-1", response: { value: "Yes" } }]);
+  });
+
   test("bridges Pi RPC select extension UI requests through question permissions", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();
