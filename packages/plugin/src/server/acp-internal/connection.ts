@@ -9,6 +9,8 @@ import {
   type Client,
   type AgentCapabilities,
   type ContentBlock,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   type NewSessionResponse,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
@@ -33,6 +35,12 @@ import type {
   RunAcpProviderOptions,
 } from "../acp.js";
 import { standardToolCallDetail } from "./tool-call-detail.js";
+import {
+  buildElicitationContent,
+  buildQuestionInputs,
+  parseElicitationForm,
+  type ParsedElicitation,
+} from "./elicitation.js";
 import {
   PROVIDER_PROTOCOL_VERSION,
   ProviderEventSchema,
@@ -449,6 +457,12 @@ interface PendingPermission {
   resolve(response: RequestPermissionResponse): void;
 }
 
+interface PendingElicitation {
+  parsed: ParsedElicitation;
+  turnId: string | undefined;
+  resolve(response: CreateElicitationResponse): void;
+}
+
 type DeferredTurnOutcome =
   | { type: "complete"; terminalizeTools: boolean }
   | { type: "cancel" }
@@ -502,6 +516,8 @@ class AcpRuntime {
   private readonly vendorToolCalls = new Map<string, ToolCallTimelineItem>();
   private readonly pendingCompactions = new Set<string>();
   private readonly permissions = new Map<string, PendingPermission>();
+  private readonly elicitations = new Map<string, PendingElicitation>();
+  private elicitationSequence = 0;
   private readonly transformers: readonly AcpTransformer[];
   private configOptions: SessionConfigOption[] = [];
   private modes: NewSessionResponse["modes"] = null;
@@ -595,7 +611,9 @@ class AcpRuntime {
         runtime.call(
           runtime.connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
-            clientCapabilities: {},
+            clientCapabilities: options.options.acpOptions?.elicitationForms
+              ? { elicitation: { form: {} } }
+              : {},
             clientInfo: { name: "paseo", version: "1" },
           }),
         ),
@@ -631,6 +649,7 @@ class AcpRuntime {
     this.transformers = options.options.transformers ?? [];
     const client: Client = {
       requestPermission: (request) => this.requestPermission(request),
+      createElicitation: (request) => this.createElicitation(request),
       sessionUpdate: (notification) => {
         const wireSeq = this.sessionUpdateWireSeqs.shift() ?? ++this.incomingWireSeq;
         return this.enqueueNotification(() => this.sessionUpdate(notification, wireSeq));
@@ -1016,6 +1035,11 @@ class AcpRuntime {
     permissionId: string,
     response: Extract<ProviderInput, { type: "session.permission" }>["response"],
   ): void {
+    const elicitation = this.elicitations.get(permissionId);
+    if (elicitation) {
+      this.respondToElicitation(permissionId, elicitation, response);
+      return;
+    }
     const pending = this.permissions.get(permissionId);
     if (!pending) return;
     const active = this.activePrompt;
@@ -1039,6 +1063,81 @@ class AcpRuntime {
         this.resolvePermission(permissionId, pending, { outcome: { outcome: "cancelled" } });
       }
     }
+    for (const [permissionId, pending] of this.elicitations) {
+      if (pending.turnId === turnId) this.resolveElicitation(permissionId, pending, "cancel");
+    }
+  }
+
+  private respondToElicitation(
+    permissionId: string,
+    pending: PendingElicitation,
+    response: Extract<ProviderInput, { type: "session.permission" }>["response"],
+  ): void {
+    const active = this.activePrompt;
+    if (active?.cancelling && pending.turnId === active.turnId) return;
+    if (response.behavior === "deny") {
+      this.resolveElicitation(permissionId, pending, "decline");
+      return;
+    }
+    const answers = response.updatedInput?.answers;
+    const content = buildElicitationContent(
+      pending.parsed,
+      typeof answers === "object" && answers !== null && !Array.isArray(answers) ? answers : {},
+    );
+    this.resolveElicitation(permissionId, pending, "accept", content);
+  }
+
+  private resolveElicitation(
+    permissionId: string,
+    pending: PendingElicitation,
+    action: "accept" | "decline" | "cancel",
+    content?: ReturnType<typeof buildElicitationContent>,
+  ): void {
+    this.elicitations.delete(permissionId);
+    pending.resolve(action === "accept" ? { action, content } : { action });
+    this.emit({
+      type: "session.permission_resolved",
+      sessionId: this.options.boundarySessionId,
+      permissionId,
+    });
+    if (this.activePrompt?.deferred) this.scheduleDeferredSettle();
+  }
+
+  private async createElicitation(
+    request: CreateElicitationRequest,
+  ): Promise<CreateElicitationResponse> {
+    await this.notificationLane;
+    if (this.closing || this.processFailed || this.activePrompt?.cancelling) {
+      return { action: "cancel" };
+    }
+    // Answerable only inside a turn of an opted-in provider. A form during session open or
+    // catalog discovery has no card to land on and would hang that request.
+    if (!this.options.options.acpOptions?.elicitationForms || !this.activePrompt) {
+      return { action: "decline" };
+    }
+    // Url mode and schemas the question card cannot express decline instead of hanging.
+    const parsed = parseElicitationForm(request);
+    if (!parsed) return { action: "decline" };
+    const permissionId = `elicitation:${++this.elicitationSequence}`;
+    return new Promise((resolve) => {
+      this.elicitations.set(permissionId, {
+        parsed,
+        resolve,
+        turnId: this.activePrompt?.turnId,
+      });
+      if (this.activePrompt?.deferred) this.scheduleDeferredSettle();
+      this.emit({
+        type: "session.permission",
+        sessionId: this.options.boundarySessionId,
+        request: {
+          id: permissionId,
+          name: "Question",
+          kind: "question",
+          title: request.message,
+          input: { questions: buildQuestionInputs(parsed) },
+        },
+      });
+    });
   }
 
   private resolvePermission(
@@ -1064,7 +1163,7 @@ class AcpRuntime {
       autoAcceptMode &&
       changes.mode !== undefined &&
       (changes.mode === autoAcceptMode.mode.id) !== this.autoAccept &&
-      (this.activePrompt || this.permissions.size > 0)
+      (this.activePrompt || this.permissions.size > 0 || this.elicitations.size > 0)
     ) {
       throw new Error(
         `Finish or stop the current turn before switching to or from ${autoAcceptMode.mode.label}.`,
@@ -1803,6 +1902,8 @@ class AcpRuntime {
       permission.resolve({ outcome: { outcome: "cancelled" } });
     }
     this.permissions.clear();
+    for (const elicitation of this.elicitations.values()) elicitation.resolve({ action: "cancel" });
+    this.elicitations.clear();
     if (this.activePrompt?.deferred) {
       this.finishDeferredTurn(
         this.activePrompt,
@@ -1995,6 +2096,7 @@ class AcpRuntime {
       (this.activePrompt?.wirePromptsInFlight ?? 0) > 0 ||
       this.hasQualifyingOpenTools() ||
       this.permissions.size > 0 ||
+      this.elicitations.size > 0 ||
       this.pendingCompactions.size > 0
     );
   }
