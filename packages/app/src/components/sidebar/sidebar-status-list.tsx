@@ -2,6 +2,7 @@ import { useWorkspaceRowPress } from "../../../modules/paseo-press-feedback";
 import { PressHighlight as Pressable } from "@/components/ui/press-highlight";
 import {
   Children,
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -290,7 +291,7 @@ export function SidebarStatusWorkspaceList({
   );
   const pinnedSection =
     pinnedWorkspaces.length > 0 ? (
-      <View style={styles.pinnedSection} testID="sidebar-pinned-section">
+      <View key="pinned" style={styles.pinnedSection} testID="sidebar-pinned-section">
         <SidebarSectionHeader
           title={t("sidebar.pinned.title")}
           collapsed={pinnedCollapsed}
@@ -324,10 +325,12 @@ export function SidebarStatusWorkspaceList({
       </View>
     ) : null;
   const header = listHeaderComponent;
+  // Explicit keys: React warns about an unkeyed element in an array, and the app shows that
+  // warning as an error toast.
   const content = Children.toArray([
     pinnedSection,
-    header,
-    <>
+    header ? <Fragment key="header">{header}</Fragment> : null,
+    <Fragment key="body">
       {sidebarFilterEmpty ? (
         <SidebarFilterEmptyState />
       ) : (
@@ -346,7 +349,7 @@ export function SidebarStatusWorkspaceList({
         />
       )}
       <SidebarToastClearance />
-    </>,
+    </Fragment>,
   ]);
   const stickyHeaderIndices = header ? [pinnedSection ? 1 : 0] : [];
 
