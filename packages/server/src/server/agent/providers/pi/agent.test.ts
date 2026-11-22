@@ -914,6 +914,7 @@ describe("PiRpcAgentSession", () => {
     const fakeSession = pi.latestSession();
 
     await session.startTurn("write file", { clientMessageId: "client-initial-1" });
+    fakeSession.emit({ type: "agent_start" });
     fakeSession.emit({
       type: "extension_ui_request",
       id: "ui-deny-reason",
@@ -969,6 +970,7 @@ describe("PiRpcAgentSession", () => {
     const fakeSession = pi.latestSession();
 
     await session.startTurn("write file", { clientMessageId: "client-initial-2" });
+    fakeSession.emit({ type: "agent_start" });
     fakeSession.emit({
       type: "extension_ui_request",
       id: "ui-long-deny",
@@ -1021,6 +1023,7 @@ describe("PiRpcAgentSession", () => {
     const { pi, session } = await createSession();
     const fakeSession = pi.latestSession();
     await session.startTurn("work");
+    fakeSession.emit({ type: "agent_start" });
 
     const skippedDenials = [
       { behavior: "deny" as const },
@@ -1070,6 +1073,7 @@ describe("PiRpcAgentSession", () => {
     const session = await client.createSession(createConfig());
     const fakeSession = pi.latestSession();
     await session.startTurn("work");
+    fakeSession.emit({ type: "agent_start" });
 
     fakeSession.emit({
       type: "extension_ui_request",
@@ -1106,6 +1110,69 @@ describe("PiRpcAgentSession", () => {
       { id: "ui-steer-error", response: { cancelled: true } },
     ]);
     await session.close();
+  });
+
+  test("steers a denial reason only when a live agent loop or active tool call is running", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    // No turn at all: cancel without steering.
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-idle",
+      method: "confirm",
+      title: "Continue?",
+    });
+    await session.respondToPermission("ui-idle", {
+      behavior: "deny",
+      message: "not while idle",
+    });
+
+    // startTurn set activeTurnId, but no agent_start/turn_start/tool call has started yet
+    // (e.g. a slash or extension command prompt): cancel without steering.
+    await session.startTurn("/ext-command");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-no-agent-start",
+      method: "confirm",
+      title: "Continue?",
+    });
+    await session.respondToPermission("ui-no-agent-start", {
+      behavior: "deny",
+      message: "command dialog denied",
+    });
+
+    expect(fakeSession.steerCalls).toEqual([]);
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-idle", response: { cancelled: true } },
+      { id: "ui-no-agent-start", response: { cancelled: true } },
+    ]);
+
+    // Once a tool execution is active, steering is enabled even without agent_start.
+    fakeSession.emit({
+      type: "tool_execution_start",
+      toolCallId: "tool-1",
+      toolName: "bash",
+      args: { command: "rm -rf /tmp/x" },
+    });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-tool-active",
+      method: "confirm",
+      title: "Allow bash?",
+    });
+    await session.respondToPermission("ui-tool-active", {
+      behavior: "deny",
+      message: "use ls instead",
+    });
+
+    expect(fakeSession.steerCalls).toHaveLength(1);
+    expect(fakeSession.steerCalls[0]?.message).toContain("use ls instead");
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-idle", response: { cancelled: true } },
+      { id: "ui-no-agent-start", response: { cancelled: true } },
+      { id: "ui-tool-active", response: { cancelled: true } },
+    ]);
   });
 
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
