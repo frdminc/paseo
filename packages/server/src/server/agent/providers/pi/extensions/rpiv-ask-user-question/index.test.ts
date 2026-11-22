@@ -273,3 +273,81 @@ test("the Pi agent releases a deferred captured dialog when the form is answered
   expect(session.getPendingPermissions()).toEqual([]);
   await session.close();
 });
+
+test("honours selectedActionId on a single-question form and rejects unmatched or bare allow without cancelling", async () => {
+  const pi = new FakePi();
+  const client = new PiRpcAgentClient({ logger: pino({ level: "silent" }), runtime: pi });
+  const session = await client.createSession({
+    provider: "pi",
+    cwd: "/tmp/paseo-pi-rpiv-selected-action-test",
+  });
+  const runtime = pi.latestSession();
+
+  await session.startTurn("ask");
+  runtime.emit({
+    type: "tool_execution_start",
+    toolCallId: "call_single",
+    toolName: "ask_user_question",
+    args: {
+      questions: [
+        {
+          question: "Which drink?",
+          header: "Drink",
+          options: [
+            { label: "Water", description: "Plain" },
+            { label: "Juice", description: "Sweet" },
+          ],
+        },
+      ],
+    },
+  });
+  const drinkDialog = {
+    id: "drink-dialog",
+    type: "extension_ui_request" as const,
+    method: "select" as const,
+    title: "[Drink] Which drink?",
+    options: ["1. Water — Plain", "2. Juice — Sweet", "3. Type something."],
+  };
+  runtime.emit(drinkDialog);
+  const [permission] = session.getPendingPermissions();
+
+  await expect(
+    session.respondToPermission(permission.id, { behavior: "allow", selectedActionId: "Soda" }),
+  ).rejects.toThrow(/"Water", "Juice"/);
+  await expect(session.respondToPermission(permission.id, { behavior: "allow" })).rejects.toThrow(
+    /must name the option/,
+  );
+  expect(runtime.extensionUiResponses).toEqual([]);
+  expect(session.getPendingPermissions()).toHaveLength(1);
+
+  await session.respondToPermission(permission.id, {
+    behavior: "allow",
+    selectedActionId: "Juice",
+  });
+  expect(runtime.extensionUiResponses).toEqual([
+    { id: drinkDialog.id, response: { value: drinkDialog.options[1] } },
+  ]);
+  expect(session.getPendingPermissions()).toEqual([]);
+  await session.close();
+});
+
+test("rejects a bare allow or single selectedActionId on a multi-question form without cancelling", () => {
+  const { host, permission } = startedHost();
+
+  expect(() =>
+    host.respondToPermission(permission, { behavior: "allow", selectedActionId: "Cookie" }),
+  ).toThrow(/updatedInput\.answers/);
+  expect(() => host.respondToPermission(permission, { behavior: "allow" })).toThrow(
+    /must name the option/,
+  );
+
+  // The deferred first dialog is still intact and answerable with full updatedInput.answers.
+  expect(
+    host.respondToPermission(permission, {
+      behavior: "allow",
+      updatedInput: {
+        answers: { Snack: "Cookie", Colors: "Red, Blue", Project: "Nebula" },
+      },
+    }),
+  ).toEqual({ responses: [{ id: dialogs[0].id, response: { value: dialogs[0].options[1] } }] });
+});

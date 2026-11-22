@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentPermissionRequest } from "../../../../agent-sdk-types.js";
 import type { PiExtension, PiExtensionDialog, PiExtensionUiResponse } from "../contract.js";
+import { resolveAllowedExtensionUiAnswer } from "../../permission-response.js";
 
 // Caps mirrored from pi's own ask_user_question schema
 // (@juicesharp/rpiv-ask-user-question tool/types.ts: MAX_HEADER_LENGTH 16,
@@ -220,12 +221,46 @@ export const rpivAskUserQuestion: PiExtension = {
         const callId = request.id.slice(PERMISSION_PREFIX.length);
         const form = forms.find((candidate) => candidate.callId === callId);
         if (!form) return { responses: [] }; // its tool already ended: nothing to corrupt
-        const answers = response.behavior === "allow" ? response.updatedInput?.answers : undefined;
-        form.answers =
-          answers && typeof answers === "object" && !Array.isArray(answers)
-            ? (answers as Record<string, unknown>)
+        if (response.behavior === "deny") {
+          form.answers = null;
+          form.cancelled = true;
+          const deferred = form.deferred;
+          form.deferred = null;
+          return {
+            responses: deferred
+              ? [{ id: deferred.id, response: answerDialog(form, deferred) }]
+              : [],
+          };
+        }
+        const rawAnswers = response.updatedInput?.answers;
+        const providedAnswers =
+          rawAnswers && typeof rawAnswers === "object" && !Array.isArray(rawAnswers)
+            ? (rawAnswers as Record<string, unknown>)
             : null;
-        form.cancelled = response.behavior === "deny" || !form.answers;
+        let resolvedAnswers: Record<string, unknown>;
+        if (form.questions.length === 1) {
+          const [question] = form.questions;
+          const chosen = resolveAllowedExtensionUiAnswer(request, response, {
+            answer: providedAnswers ? answerFor(providedAnswers, question) : null,
+            labels: question.options.map((option) => option.label),
+            answerHeader: question.header,
+          });
+          resolvedAnswers = { [question.header]: chosen };
+        } else {
+          const missing = form.questions.find(
+            (question) => !providedAnswers || answerFor(providedAnswers, question) === null,
+          );
+          if (missing) {
+            resolveAllowedExtensionUiAnswer(request, response, {
+              answer: null,
+              labels: [],
+              answerHeader: missing.header,
+            });
+          }
+          resolvedAnswers = providedAnswers as Record<string, unknown>;
+        }
+        form.answers = resolvedAnswers;
+        form.cancelled = false;
         const deferred = form.deferred;
         form.deferred = null;
         return {
