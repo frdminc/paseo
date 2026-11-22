@@ -661,6 +661,30 @@ describe("PiRpcAgentSession", () => {
     expect(message).toContain(`--input '{"answers":{"Response":"<answer>"}}'`);
   });
 
+  test("caps each echoed option label length in a rejected Pi allow error", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-long-label",
+      method: "select",
+      title: "Pick",
+      options: ["y".repeat(500), "Short"],
+    });
+
+    const error = await session
+      .respondToPermission("ui-long-label", { behavior: "allow" })
+      .catch((caught: unknown) => caught as Error);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain(`"${"y".repeat(80)}"...`);
+    expect(message).not.toContain("y".repeat(100));
+    expect(message).toContain('"Short"');
+  });
+
   test("bridges Pi RPC select extension UI requests through question permissions", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();
