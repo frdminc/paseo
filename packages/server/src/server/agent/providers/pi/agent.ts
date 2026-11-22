@@ -18,6 +18,7 @@ import {
   type McpServerConfig,
   type AgentPermissionRequest,
   type AgentPermissionResponse,
+  type AgentPermissionResponseOptions,
   type AgentProviderNotice,
   type AgentClientInstallation,
   type AgentPersistenceHandle,
@@ -43,6 +44,7 @@ import {
   type ProviderCatalog,
   type ProviderRefreshContext,
 } from "../../agent-sdk-types.js";
+import { envelopeMessage } from "../../agent-messages/envelope.js";
 import { importSessionFromPersistence } from "../../provider-session-import.js";
 import { createCliInstallation } from "../cli-installation.js";
 import {
@@ -131,6 +133,7 @@ const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
 const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PI_RPC_TIMEOUT_MS = 60_000;
+const MAX_STEERED_DENIAL_REASON_CHARS = 2048;
 const STEER_CLEARED_PERMISSION_MESSAGE =
   "The user answered with a message instead of approving. Their message follows.";
 // Fixed internal / UI dismissal strings that carry no user-authored denial reason to steer.
@@ -1094,7 +1097,10 @@ function buildExtensionUiQuestionPermission(
   };
 }
 
-function denialReasonToSteer(response: AgentPermissionResponse): string | null {
+function denialReasonToSteer(
+  response: AgentPermissionResponse,
+  options?: AgentPermissionResponseOptions,
+): string | null {
   if (response.behavior !== "deny" || response.interrupt) {
     return null;
   }
@@ -1102,7 +1108,20 @@ function denialReasonToSteer(response: AgentPermissionResponse): string | null {
   if (!reason || FIXED_PERMISSION_DENY_MESSAGES.has(reason)) {
     return null;
   }
-  return `Reason given for the denial: ${reason}`;
+  const capped =
+    reason.length > MAX_STEERED_DENIAL_REASON_CHARS
+      ? `${reason.slice(0, MAX_STEERED_DENIAL_REASON_CHARS)}... [truncated]`
+      : reason;
+  const labeled = `Permission response denial reason (supplied via permission response, not typed in chat): ${capped}`;
+  if (options?.callerAgentId) {
+    const wrapped = envelopeMessage(labeled, {
+      kind: "agent-message",
+      agentId: options.callerAgentId,
+      ...(options.callerAgentTitle ? { title: options.callerAgentTitle } : {}),
+    }).prompt;
+    return typeof wrapped === "string" ? wrapped : labeled;
+  }
+  return labeled;
 }
 
 function buildExtensionUiResponse(
@@ -1525,7 +1544,11 @@ export class PiRpcAgentSession implements AgentSession {
     return [...this.pendingExtensionUiRequests.values()];
   }
 
-  async respondToPermission(requestId: string, response: AgentPermissionResponse): Promise<void> {
+  async respondToPermission(
+    requestId: string,
+    response: AgentPermissionResponse,
+    options?: AgentPermissionResponseOptions,
+  ): Promise<void> {
     const request = this.pendingExtensionUiRequests.get(requestId);
     if (!request) {
       throw new Error(`No pending permission request with id '${requestId}'`);
@@ -1542,7 +1565,7 @@ export class PiRpcAgentSession implements AgentSession {
     // Pi's extension_ui_response cancel carries no reason field. Steer the user-supplied reason
     // BEFORE cancelling while Pi is still parked inside tool execution, so the steering queue
     // holds it deterministically before the next LLM turn runs.
-    const steerText = denialReasonToSteer(response);
+    const steerText = denialReasonToSteer(response, options);
     if (
       steerText &&
       replies.length > 0 &&
