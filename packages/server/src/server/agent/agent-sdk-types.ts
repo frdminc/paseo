@@ -706,6 +706,11 @@ export interface AgentUsageSession {
   sessionKey: string;
 }
 
+export interface AgentPermissionResponseOptions {
+  callerAgentId?: string;
+  callerAgentTitle?: string;
+}
+
 export interface AgentSession {
   /** Persist the session's current handle immediately after an interactive resume. */
   readonly persistenceUpdatedOnResume?: boolean;
@@ -738,6 +743,7 @@ export interface AgentSession {
   respondToPermission(
     requestId: string,
     response: AgentPermissionResponse,
+    options?: AgentPermissionResponseOptions,
   ): Promise<AgentPermissionResult | void>;
   /** Null until a new provider process could resume this session; see docs/providers.md. */
   describePersistence(): AgentPersistenceHandle | null;

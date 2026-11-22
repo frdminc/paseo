@@ -43,6 +43,7 @@ import {
   type AgentMode,
   type AgentPermissionRequest,
   type AgentPermissionResponse,
+  type AgentPermissionResponseOptions,
   type AgentPermissionResult,
   type AgentPersistenceHandle,
   type AgentProviderNotice,
@@ -3936,6 +3937,7 @@ export class AgentManager {
     agentId: string,
     requestId: string,
     response: AgentPermissionResponse,
+    options?: AgentPermissionResponseOptions,
   ): Promise<AgentPermissionResult | void> {
     const agent = this.requireAgent(agentId);
     if (agent.inFlightPermissionResponses.has(requestId)) {
@@ -3944,7 +3946,7 @@ export class AgentManager {
     agent.inFlightPermissionResponses.add(requestId);
 
     try {
-      const result = await agent.session.respondToPermission(requestId, response);
+      const result = await agent.session.respondToPermission(requestId, response, options);
       agent.pendingPermissions.delete(requestId);
 
       try {

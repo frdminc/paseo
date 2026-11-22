@@ -3363,6 +3363,8 @@ function createToolCatalog(
         agentId,
         requestId,
         response,
+        callerAgentId,
+        callerAgentTitle: resolveCallerAgent()?.config.title ?? undefined,
         logger: childLogger,
       });
       return {

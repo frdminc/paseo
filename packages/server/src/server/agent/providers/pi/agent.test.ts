@@ -18,6 +18,7 @@ import { setImmediate as waitForImmediate } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { describe, expect, onTestFinished, test, vi } from "vitest";
 
+import { parseAgentMessage } from "../../agent-messages/envelope.js";
 import type { AgentSession, AgentSessionConfig, AgentStreamEvent } from "../../agent-sdk-types.js";
 import { PiProviderOptionsSchema, PiRpcAgentClient, PiRpcAgentSession } from "./agent.js";
 import { PiCliRuntime } from "./cli-runtime.js";
@@ -934,9 +935,9 @@ describe("PiRpcAgentSession", () => {
     await waitForImmediate();
 
     // Cancel must wait until steer settles so Pi does not advance the turn first.
-    expect(fakeSession.steerCalls).toEqual([
-      { message: "Reason given for the denial: use a scratch path instead", imageCount: 0 },
-    ]);
+    const expectedSteer =
+      "Permission response denial reason (supplied via permission response, not typed in chat): use a scratch path instead";
+    expect(fakeSession.steerCalls).toEqual([{ message: expectedSteer, imageCount: 0 }]);
     expect(fakeSession.extensionUiResponses).toEqual([]);
 
     releaseSteer();
@@ -954,12 +955,65 @@ describe("PiRpcAgentSession", () => {
     fakeSession.finishSubmittedUserMessage({
       id: "entry-deny-steer",
       parentId: null,
-      text: "Reason given for the denial: use a scratch path instead",
+      text: expectedSteer,
     });
     expect(events.timelineItems()).toContainEqual({
       type: "user_message",
-      text: "Reason given for the denial: use a scratch path instead",
+      text: expectedSteer,
       messageId: "entry-deny-steer",
+    });
+  });
+
+  test("caps long denial reasons and wraps agent-originated denial reasons in an agent-message envelope", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("write file", { clientMessageId: "client-initial-2" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-long-deny",
+      method: "confirm",
+      title: "Allow?",
+    });
+    await session.respondToPermission("ui-long-deny", {
+      behavior: "deny",
+      message: "z".repeat(3000),
+    });
+
+    expect(fakeSession.steerCalls).toHaveLength(1);
+    const cappedSteer = fakeSession.steerCalls[0]?.message ?? "";
+    expect(cappedSteer).toContain(`${"z".repeat(2048)}... [truncated]`);
+    expect(cappedSteer).not.toContain("z".repeat(2049));
+
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-agent-deny",
+      method: "confirm",
+      title: "Allow?",
+    });
+    await session.respondToPermission(
+      "ui-agent-deny",
+      { behavior: "deny", message: "keep changes in your own worktree" },
+      { callerAgentId: "lead-agent-9", callerAgentTitle: "Coordinator" },
+    );
+
+    expect(fakeSession.steerCalls).toHaveLength(2);
+    const agentSteer = fakeSession.steerCalls[1]?.message ?? "";
+    const parsed = parseAgentMessage(agentSteer);
+    expect(parsed).toMatchObject({
+      source: { kind: "agent-message", agentId: "lead-agent-9", title: "Coordinator" },
+      text: "Permission response denial reason (supplied via permission response, not typed in chat): keep changes in your own worktree",
+    });
+
+    fakeSession.finishSubmittedUserMessage({
+      id: "entry-agent-deny-steer",
+      parentId: null,
+      text: agentSteer,
+    });
+    expect(events.timelineItems()).toContainEqual({
+      type: "user_message",
+      text: agentSteer,
+      messageId: "entry-agent-deny-steer",
     });
   });
 
