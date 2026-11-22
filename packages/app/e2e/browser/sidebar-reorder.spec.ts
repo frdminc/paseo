@@ -12,7 +12,7 @@ import { gotoAppShell } from "../support/helpers/app";
 import { projectEquivalenceViewKey } from "../support/helpers/project-view-key";
 import { getServerId } from "../support/helpers/server-id";
 import { seedWorkspace } from "../support/helpers/seed-client";
-import { openMobileAgentSidebar, selectSidebarStatusGrouping } from "../support/helpers/sidebar";
+import { selectSidebarStatusGrouping } from "../support/helpers/sidebar";
 import { waitForSidebarHydration } from "../support/helpers/workspace-ui";
 import { tapSheetBackdrop } from "../support/helpers/sheet";
 
