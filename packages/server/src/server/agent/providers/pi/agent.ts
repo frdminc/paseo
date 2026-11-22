@@ -1348,6 +1348,7 @@ export class PiRpcAgentSession implements AgentSession {
     this.activeTurnStartedEmitted = false;
     this.pendingSettledMessages = null;
     this.activePromptRequestId = null;
+    this.activeToolCalls.clear();
     this.pendingSteerSubmissions.length = 0;
     this.clearNoTurnBuffers();
     const payload = await convertPromptInput(prompt, { model: this.state.model });
@@ -1394,6 +1395,7 @@ export class PiRpcAgentSession implements AgentSession {
         this.activeTurnStartedEmitted = false;
         this.pendingSettledMessages = null;
         this.activeAssistantMessageId = null;
+        this.activeToolCalls.clear();
         this.pendingSteerSubmissions.length = 0;
         this.clearNoTurnBuffers();
         if (isPiRequestAbortError(error)) {
