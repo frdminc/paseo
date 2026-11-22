@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import {
   Children,
+  Fragment,
   memo,
   useCallback,
   useMemo,
@@ -2508,7 +2509,7 @@ function ProjectModeList({
 
   const pinnedSection =
     pinnedChats.length > 0 ? (
-      <View style={styles.pinnedSection} testID="sidebar-pinned-section">
+      <View key="pinned" style={styles.pinnedSection} testID="sidebar-pinned-section">
         <SidebarSectionHeader
           title={t("sidebar.pinned.title")}
           collapsed={pinnedCollapsed}
@@ -2551,14 +2552,16 @@ function ProjectModeList({
     sidebarFilterEmpty
       ? listHeaderComponent
       : null;
+  // Explicit keys: React warns about an unkeyed element in an array, and the app shows that
+  // warning as an error toast.
   const content = Children.toArray([
     pinnedSection,
-    header,
-    <>
+    header ? <Fragment key="header">{header}</Fragment> : null,
+    <Fragment key="body">
       {sidebarFilterEmpty ? <SidebarFilterEmptyState /> : projectBody}
       {listFooterComponent}
       <SidebarToastClearance />
-    </>,
+    </Fragment>,
   ]);
   const stickyHeaderIndices = header ? [pinnedSection ? 1 : 0] : [];
 
