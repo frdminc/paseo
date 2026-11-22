@@ -17,7 +17,9 @@ env:
 jobs:
   build:
     name: macOS arm64 (WarpBuild) source, tests and desktop artifact
-    runs-on: warp-macos-26-arm64-6x
+    # GitHub-hosted macos-26 is free for public repos. Fall back to warp-macos-26-arm64-6x
+    # only if the build OOMs or times out here.
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
