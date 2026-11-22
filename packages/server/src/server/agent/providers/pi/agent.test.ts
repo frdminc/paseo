@@ -1439,6 +1439,52 @@ describe("PiRpcAgentSession", () => {
     await expect(session.canStopRuntime()).resolves.toBe(true);
   });
 
+  test("matches a denial-steer user entry marker arriving while steer is still awaited", async () => {
+    const { pi, session, events } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("write file", { clientMessageId: "client-initial-in-flight" });
+    fakeSession.emit({ type: "agent_start" });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-in-flight-marker",
+      method: "confirm",
+      title: "Allow?",
+    });
+
+    let releaseSteer!: () => void;
+    fakeSession.steerCompletion = new Promise<void>((resolve) => {
+      releaseSteer = resolve;
+    });
+
+    const respondPromise = session.respondToPermission("ui-in-flight-marker", {
+      behavior: "deny",
+      message: "marker arrived before steer ack",
+    });
+    await waitForImmediate();
+
+    const steerText = fakeSession.steerCalls[0]?.message ?? "";
+    expect(steerText).toContain("marker arrived before steer ack");
+    // Deliver PASEO_SUBMITTED_USER_ENTRY before steer() resolves.
+    fakeSession.finishSubmittedUserMessage({
+      id: "entry-during-await",
+      parentId: null,
+      text: steerText,
+    });
+
+    expect(events.timelineItems()).toContainEqual({
+      type: "user_message",
+      text: steerText,
+      messageId: "entry-during-await",
+    });
+
+    releaseSteer();
+    await respondPromise;
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-in-flight-marker", response: { cancelled: true } },
+    ]);
+  });
+
   test("surfaces Pi fire-and-forget notify requests as timeline notifications", async () => {
     const { pi, session, events } = await createSession();
     const fakeSession = pi.latestSession();
