@@ -86,6 +86,7 @@ import { isElectronRuntime } from "@/desktop/host";
 import { useDesktopAppUpdater } from "@/desktop/updates/use-desktop-app-updater";
 import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { resolveAppVersion } from "@/utils/app-version";
+import { formatVersionWithForkBuild } from "@/utils/fork-build";
 import { openChangelog } from "@/changelog";
 import { useAppDiagnosticStore } from "@/diagnostics/store";
 import { settingsStyles } from "@/styles/settings";
@@ -1122,7 +1123,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   const isDesktopApp = isElectronRuntime();
   const hardwareKeyboardPresent = useHardwareKeyboardPresent();
   const appVersion = resolveAppVersion();
-  const appVersionText = formatVersionWithPrefix(appVersion);
+  const appVersionText = formatVersionWithForkBuild(formatVersionWithPrefix(appVersion));
   const isCompactLayout = useIsCompactFormFactor();
   const onContentLayout = useSettingsContentPresented();
   const insets = useSafeAreaInsets();
