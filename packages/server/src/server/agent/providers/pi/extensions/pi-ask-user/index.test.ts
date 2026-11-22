@@ -1,4 +1,7 @@
 import { describe, expect, test } from "vitest";
+import pino from "pino";
+import { PiRpcAgentClient } from "../../agent.js";
+import { FakePi } from "../../test-utils/fake-pi.js";
 import { createPiExtensionHost } from "../index.js";
 
 describe("pi-ask-user adapter", () => {
@@ -66,5 +69,55 @@ describe("pi-ask-user adapter", () => {
     expect(host.respondToPermission(mapped.request, { behavior: "deny" })).toEqual({
       responses: [{ id: "select-2", response: { cancelled: true } }],
     });
+  });
+
+  test("honours selectedActionId on an allow and rejects unmatched or bare allow without cancelling", async () => {
+    const pi = new FakePi();
+    const client = new PiRpcAgentClient({ logger: pino({ level: "silent" }), runtime: pi });
+    const session = await client.createSession({
+      provider: "pi",
+      cwd: "/tmp/paseo-pi-ask-user-test",
+    });
+    const runtime = pi.latestSession();
+
+    await session.startTurn("ask");
+    runtime.emit({
+      type: "tool_execution_start",
+      toolCallId: "ask-3",
+      toolName: "ask_user",
+      args: { allowComment: true, allowFreeform: false },
+    });
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "select-3",
+      method: "select",
+      title: "Pick one",
+      options: ["Yes", "No"],
+    });
+
+    await expect(
+      session.respondToPermission("select-3", { behavior: "allow", selectedActionId: "Sure" }),
+    ).rejects.toThrow(/"Yes", "No"/);
+    await expect(session.respondToPermission("select-3", { behavior: "allow" })).rejects.toThrow(
+      /must name the option/,
+    );
+    expect(runtime.extensionUiResponses).toEqual([]);
+    expect(session.getPendingPermissions()).toHaveLength(1);
+
+    await session.respondToPermission("select-3", { behavior: "allow", selectedActionId: "Yes" });
+    expect(runtime.extensionUiResponses).toEqual([{ id: "select-3", response: { value: "Yes" } }]);
+    expect(session.getPendingPermissions()).toEqual([]);
+
+    runtime.emit({
+      type: "extension_ui_request",
+      id: "comment-3",
+      method: "input",
+      placeholder: "Optional comment (press Enter to skip)...",
+    });
+    expect(runtime.extensionUiResponses).toEqual([
+      { id: "select-3", response: { value: "Yes" } },
+      { id: "comment-3", response: { value: "" } },
+    ]);
+    await session.close();
   });
 });
