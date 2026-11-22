@@ -128,6 +128,9 @@ const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
 const DEFAULT_PI_RPC_TIMEOUT_MS = 60_000;
 const QUESTION_RESPONSE_HEADER = "Response";
+// Caps on caller- and extension-supplied text echoed into a rejected-allow error.
+const MAX_ECHOED_LABELS = 20;
+const MAX_ECHOED_CHARS = 80;
 
 export const PiProviderOptionsSchema = z
   .object({
@@ -1124,12 +1127,16 @@ function resolveAllowedExtensionUiAnswer(
   }
   const reason =
     selected !== undefined
-      ? `selectedActionId '${selected}' is not an offered option`
+      ? `selectedActionId ${JSON.stringify(selected.slice(0, MAX_ECHOED_CHARS))} is not an offered option`
       : "an allow response must name the option it picks";
+  const header = optionalString(request.metadata?.answerHeader) ?? QUESTION_RESPONSE_HEADER;
+  const viaAnswers = `updatedInput.answers (CLI: --input '{"answers":{"${header}":"<answer>"}}')`;
+  const shown = labels.slice(0, MAX_ECHOED_LABELS).map((label) => JSON.stringify(label));
+  const more = labels.length > shown.length ? ` and ${labels.length - shown.length} more` : "";
   const hint =
     labels.length > 0
-      ? `set selectedActionId to one of: ${labels.map((label) => `'${label}'`).join(", ")}, or pass updatedInput.answers`
-      : "pass updatedInput.answers";
+      ? `set selectedActionId to one of: ${shown.join(", ")}${more}, or pass ${viaAnswers}`
+      : `pass ${viaAnswers}`;
   throw new Error(`Pi permission request '${request.id}': ${reason}; ${hint}`);
 }
 

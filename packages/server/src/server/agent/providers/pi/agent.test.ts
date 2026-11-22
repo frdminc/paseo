@@ -571,7 +571,7 @@ describe("PiRpcAgentSession", () => {
 
     await expect(
       session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Sure" }),
-    ).rejects.toThrow(/'Yes', 'No'/);
+    ).rejects.toThrow(/"Yes", "No"/);
     await expect(session.respondToPermission("ui-1", { behavior: "allow" })).rejects.toThrow(
       /must name the option/,
     );
@@ -580,6 +580,85 @@ describe("PiRpcAgentSession", () => {
 
     await session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Yes" });
     expect(fakeSession.extensionUiResponses).toEqual([{ id: "ui-1", response: { value: "Yes" } }]);
+  });
+
+  test("never answers a free-text Pi input with a generic selectedActionId", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-1",
+      method: "input",
+      title: "Name?",
+    });
+
+    await expect(
+      session.respondToPermission("ui-1", { behavior: "allow", selectedActionId: "Yes" }),
+    ).rejects.toThrow(/updatedInput\.answers/);
+    expect(fakeSession.extensionUiResponses).toEqual([]);
+    expect(session.getPendingPermissions()).toHaveLength(1);
+  });
+
+  test("prefers updatedInput.answers over selectedActionId and maps a confirm No", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-1",
+      method: "select",
+      title: "Pick",
+      options: ["A", "B"],
+    });
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-2",
+      method: "confirm",
+      title: "Authorize",
+    });
+
+    await session.respondToPermission("ui-1", {
+      behavior: "allow",
+      selectedActionId: "A",
+      updatedInput: { answers: { Response: "B" } },
+    });
+    await session.respondToPermission("ui-2", { behavior: "allow", selectedActionId: "No" });
+
+    expect(fakeSession.extensionUiResponses).toEqual([
+      { id: "ui-1", response: { value: "B" } },
+      { id: "ui-2", response: { confirmed: false } },
+    ]);
+  });
+
+  test("quotes and caps what a rejected Pi allow echoes back", async () => {
+    const { pi, session } = await createSession();
+    const fakeSession = pi.latestSession();
+    const options = Array.from({ length: 25 }, (_, index) => `Option ${index}`);
+    options[0] = "Yes', 'No\u001b[31m";
+
+    await session.startTurn("ask");
+    fakeSession.emit({
+      type: "extension_ui_request",
+      id: "ui-1",
+      method: "select",
+      title: "Pick",
+      options,
+    });
+
+    const error = await session
+      .respondToPermission("ui-1", { behavior: "allow", selectedActionId: "x".repeat(500) })
+      .catch((caught: unknown) => caught as Error);
+
+    expect(error).toBeInstanceOf(Error);
+    const message = (error as Error).message;
+    expect(message).toContain("\"Yes', 'No\\u001b[31m\"");
+    expect(message).not.toContain("\u001b");
+    expect(message).toContain("and 5 more");
+    expect(message).not.toContain("x".repeat(100));
+    expect(message).toContain(`--input '{"answers":{"Response":"<answer>"}}'`);
   });
 
   test("bridges Pi RPC select extension UI requests through question permissions", async () => {
