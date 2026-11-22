@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { AgentPermissionRequest } from "../../../../agent-sdk-types.js";
 import type { PiExtension, PiExtensionDialog, PiExtensionUiResponse } from "../contract.js";
-import { resolveAllowedExtensionUiAnswer } from "../../permission-response.js";
+import { resolveAllowedExtensionUiAnswer } from "../../extension-ui-answer.js";
 
 // Caps mirrored from pi's own ask_user_question schema
 // (@juicesharp/rpiv-ask-user-question tool/types.ts: MAX_HEADER_LENGTH 16,
