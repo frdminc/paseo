@@ -23,7 +23,7 @@ import {
 import type { CreationSnapshot } from "@getpaseo/protocol/messages";
 import { CreationService } from "./creation/index.js";
 import { MessageReceipts } from "./message-receipts/index.js";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer, type PerMessageDeflateOptions } from "ws";
 import type { IncomingMessage, Server as HTTPServer } from "http";
 import { join } from "path";
 import { getCachedHostMachineKind } from "./host-machine-kind.js";
@@ -153,6 +153,18 @@ import {
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
 // Give clients intermediate messages that count as progress during large transfers.
 const DIRECT_WEBSOCKET_FRAME_BYTES = 512 * 1024;
+
+// Compress large JSON/timeline frames over direct WebSockets while skipping
+// tiny pings/keystrokes and avoiding per-connection persistent zlib contexts.
+export const WEBSOCKET_PER_MESSAGE_DEFLATE_OPTIONS: PerMessageDeflateOptions = {
+  threshold: 1024,
+  zlibDeflateOptions: {
+    level: 3,
+  },
+  clientNoContextTakeover: true,
+  serverNoContextTakeover: true,
+  concurrencyLimit: 10,
+};
 
 export interface ExternalSocketMetadata {
   transport: "relay" | "hub";
@@ -948,6 +960,7 @@ export class VoiceAssistantWebSocketServer {
       server,
       path: "/ws",
       maxPayload: MAX_WEBSOCKET_MESSAGE_BYTES,
+      perMessageDeflate: WEBSOCKET_PER_MESSAGE_DEFLATE_OPTIONS,
       handleProtocols: (protocols) => selectWebSocketProtocol(protocols, password),
       verifyClient: ({ req }, callback) => {
         this.verifyWsUpgrade(
