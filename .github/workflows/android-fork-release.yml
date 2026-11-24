@@ -319,5 +319,6 @@ jobs:
           # beta and stable channels collapse into one (ShizukuTendCF #407).
           PRE=()
           case "$PACKAGE_VERSION" in *-*) PRE=(--prerelease) ;; esac
-          gh release create "$TAG" --verify-tag --title "Paseo Fork $PACKAGE_VERSION (build ${TAG##*-r})" \
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Paseo Fork $PACKAGE_VERSION (build ${TAG##*-r})" \
             --notes-file notes.md "${PRE[@]}" "out/$ASSET" out/SHA256SUMS
