@@ -401,4 +401,20 @@ describe("agent ID search", () => {
     const idHit = withAgent("id", "5432abcd-1111-4222-8333-444455556666");
     expect(rank([idHit, changeRequest], "5432").map((row) => row.id)).toEqual(["pr", "id"]);
   });
+
+  it("keeps workspace-level targeting when a numeric query hits the workspace's own change request and an agent ID", () => {
+    const opened: string[] = [];
+    const both = workspace({
+      id: "pr-and-agent",
+      title: "Payments refactor",
+      changeRequestNumber: 5432,
+      agents: [agent("5432abcd-1111-4222-8333-444455556666", "Some work")],
+      opened,
+    });
+    const [row] = rank([both], "5432");
+    expect(row?.id).toBe("pr-and-agent");
+    expect(row?.matchedAgent).toBeNull();
+    row?.run();
+    expect(opened).toEqual(["workspace"]);
+  });
 });

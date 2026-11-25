@@ -5,6 +5,7 @@ import {
 } from "./agent-history-search.js";
 
 function candidate(input: {
+  id?: string;
   title?: string | null;
   workspaceName?: string | null;
   branch?: string | null;
@@ -14,7 +15,7 @@ function candidate(input: {
   const branch = input.branch ?? null;
   return {
     agent: {
-      id: input.title ?? "agent",
+      id: input.id ?? input.title ?? "agent",
       title: input.title ?? null,
       updatedAt: input.updatedAt ?? "2026-08-07T00:00:00.000Z",
     },
@@ -95,5 +96,17 @@ describe("matchesAgentHistoryQuery", () => {
 
   it("keeps candidates for a blank query", () => {
     expect(matchesAgentHistoryQuery("   ", candidate({ title: "anything" }))).toBe(true);
+  });
+
+  it("matches archived agents by agent ID prefix, substring, or full UUID", () => {
+    const entry = candidate({
+      id: "54b15a51-1111-4222-8333-444455556666",
+      title: "Unrelated title",
+      workspaceName: "Unrelated workspace",
+    });
+    expect(matchesAgentHistoryQuery("54b15a51", entry)).toBe(true);
+    expect(matchesAgentHistoryQuery("4222-8333", entry)).toBe(true);
+    expect(matchesAgentHistoryQuery("54b15a51-1111-4222-8333-444455556666", entry)).toBe(true);
+    expect(matchesAgentHistoryQuery("9999aaaa", entry)).toBe(false);
   });
 });

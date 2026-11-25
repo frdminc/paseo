@@ -214,7 +214,7 @@ export function createWorkspaceRanker(): WorkspaceRanker {
     for (const workspace of workspaces) {
       const changeRequestHit =
         changeRequestNumber !== null && workspace.changeRequestNumber === changeRequestNumber;
-      const idMatch = agentIdMatch(workspace, idQuery);
+      const idMatch = changeRequestHit ? null : agentIdMatch(workspace, idQuery);
       if (idMatch) {
         matches.push({
           workspace,
