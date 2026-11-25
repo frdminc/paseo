@@ -2371,6 +2371,7 @@ export const ru: TranslationResources = {
   },
   settings: {
     title: "Настройки",
+    searchResults: "Результаты поиска",
     loading: "Загрузка настроек...",
     groups: {
       app: "Приложение",

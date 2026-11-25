@@ -2368,6 +2368,7 @@ export const ptBR: TranslationResources = {
   },
   settings: {
     title: "Configurações",
+    searchResults: "Resultados da pesquisa",
     loading: "Carregando configurações...",
     groups: {
       app: "App",
