@@ -2414,6 +2414,7 @@ export const en = {
   },
   settings: {
     title: "Settings",
+    searchResults: "Search results",
     loading: "Loading settings...",
     groups: {
       app: "App",

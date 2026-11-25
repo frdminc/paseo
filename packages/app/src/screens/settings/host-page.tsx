@@ -70,6 +70,11 @@ import { PaseoToolsCard } from "./paseo-tools-card";
 import { RestartRecoveryCard } from "./restart-recovery-card";
 import { IdleRuntimeCleanupCard } from "./idle-runtime-cleanup-card";
 import { restartDaemonFromSettings, updateDaemonFromSettings } from "./daemon-lifecycle";
+import {
+  TERMINAL_AGENTS_TITLE,
+  TERMINAL_AGENT_HOOKS_HINT,
+  TERMINAL_AGENT_HOOKS_TITLE,
+} from "./terminal-agents-copy";
 
 const ThemedRestart = withUnistyles(RotateCw);
 const ThemedUpdate = withUnistyles(ArrowUpToLine);
@@ -275,9 +280,7 @@ export function HostDevicesPage({ serverId }: { serverId: string }) {
 }
 
 export function HostAgentsPage({ serverId }: { serverId: string }) {
-  const { t } = useTranslation();
   const host = useHostProfile(serverId);
-  const isConnected = useHostRuntimeIsConnected(serverId);
 
   if (!host) {
     return <HostNotFound />;
@@ -285,19 +288,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
 
   return (
     <View>
-      {isConnected ? (
-        <SettingsSection title={t("settings.hostSections.agents")}>
-          <PaseoToolsCard serverId={serverId} />
-          <BrowserToolsOptInCard serverId={serverId} />
-          <AppendSystemPromptCard serverId={serverId} />
-          <RestartRecoveryCard serverId={serverId} />
-          <IdleRuntimeCleanupCard serverId={serverId} />
-        </SettingsSection>
-      ) : (
-        <View style={[settingsStyles.card, styles.emptyCard]}>
-          <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
-        </View>
-      )}
+      <HostAgentsRuntimeSection serverId={serverId} />
       <AgentSkillsSection serverId={serverId} />
     </View>
   );
@@ -336,6 +327,43 @@ export function HostAgentProfilesPage({
   );
 }
 
+function HostAgentsRuntimeSection({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+
+  return isConnected ? (
+    <SettingsSection title={t("settings.hostSections.agents")}>
+      <PaseoToolsCard serverId={serverId} />
+      <BrowserToolsOptInCard serverId={serverId} />
+      <AppendSystemPromptCard serverId={serverId} />
+      <RestartRecoveryCard serverId={serverId} />
+      <IdleRuntimeCleanupCard serverId={serverId} />
+    </SettingsSection>
+  ) : (
+    <View style={[settingsStyles.card, styles.emptyCard]}>
+      <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
+    </View>
+  );
+}
+
+export type HostAgentsSearchGroup = "runtime" | "skills";
+
+export function HostAgentsSearchPage({
+  serverId,
+  group,
+}: {
+  serverId: string;
+  group: HostAgentsSearchGroup;
+}) {
+  const host = useHostProfile(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  if (group === "runtime") return <HostAgentsRuntimeSection serverId={serverId} />;
+  return <AgentSkillsSection serverId={serverId} />;
+}
 export function HostWorkspacesPage({ serverId }: { serverId: string }) {
   const { t } = useTranslation();
   const host = useHostProfile(serverId);
@@ -420,6 +448,31 @@ export function HostSettingsPage({
       <RemoveHostSection host={host} isLocalDaemon={isLocalDaemon} onRemoved={onHostRemoved} />
     </View>
   );
+}
+
+export type HostSettingsSearchGroup = "appearance" | "danger";
+
+export function HostSettingsSearchPage({
+  serverId,
+  group,
+  onHostRemoved,
+}: {
+  serverId: string;
+  group: HostSettingsSearchGroup;
+  onHostRemoved: () => void;
+}) {
+  const host = useHostProfile(serverId);
+  const isLocalDaemon = useIsLocalDaemon(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  if (group === "appearance") {
+    return <HostAppearanceSection host={host} />;
+  }
+
+  return <RemoveHostSection host={host} isLocalDaemon={isLocalDaemon} onRemoved={onHostRemoved} />;
 }
 
 function ConnectionsSection({ host }: { host: HostProfile }) {
@@ -995,16 +1048,13 @@ function EnableTerminalAgentHooksCard({ serverId }: { serverId: string }) {
     <View style={settingsStyles.card} testID="host-page-terminal-agent-hooks-card">
       <View style={settingsStyles.row}>
         <View style={settingsStyles.rowContent}>
-          <Text style={settingsStyles.rowTitle}>Enable terminal agent hooks</Text>
-          <Text style={settingsStyles.rowHint}>
-            Get notifications and status from terminal agents. This installs hooks in your agent
-            config files.
-          </Text>
+          <Text style={settingsStyles.rowTitle}>{TERMINAL_AGENT_HOOKS_TITLE}</Text>
+          <Text style={settingsStyles.rowHint}>{TERMINAL_AGENT_HOOKS_HINT}</Text>
         </View>
         <Switch
           value={config?.enableTerminalAgentHooks === true}
           onValueChange={handleValueChange}
-          accessibilityLabel="Enable terminal agent hooks"
+          accessibilityLabel={TERMINAL_AGENT_HOOKS_TITLE}
           testID="host-page-terminal-agent-hooks-switch"
         />
       </View>
@@ -1655,11 +1705,39 @@ export function HostTerminalsPage({ serverId }: { serverId: string }) {
 
   return (
     <View>
-      <SettingsSection title="Terminal agents">
-        <EnableTerminalAgentHooksCard serverId={serverId} />
-      </SettingsSection>
+      <TerminalAgentsSection serverId={serverId} />
       <TerminalProfilesSection serverId={serverId} />
     </View>
+  );
+}
+
+function TerminalAgentsSection({ serverId }: { serverId: string }) {
+  return (
+    <SettingsSection title={TERMINAL_AGENTS_TITLE}>
+      <EnableTerminalAgentHooksCard serverId={serverId} />
+    </SettingsSection>
+  );
+}
+
+export type HostTerminalsSearchGroup = "agents" | "profiles";
+
+export function HostTerminalsSearchPage({
+  serverId,
+  group,
+}: {
+  serverId: string;
+  group: HostTerminalsSearchGroup;
+}) {
+  const host = useHostProfile(serverId);
+
+  if (!host) {
+    return <HostNotFound />;
+  }
+
+  return group === "agents" ? (
+    <TerminalAgentsSection serverId={serverId} />
+  ) : (
+    <TerminalProfilesSection serverId={serverId} />
   );
 }
 

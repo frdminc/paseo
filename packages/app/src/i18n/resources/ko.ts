@@ -2396,6 +2396,7 @@ export const ko: TranslationResources = {
   },
   settings: {
     title: "설정",
+    searchResults: "검색 결과",
     loading: "설정 불러오는 중...",
     groups: {
       app: "앱",
