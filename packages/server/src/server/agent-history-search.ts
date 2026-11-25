@@ -17,6 +17,7 @@ export function matchesAgentHistoryQuery(
       [
         project.workspaceName ?? "",
         agent.title ?? "",
+        agent.id,
         project.checkout.currentBranch ?? "",
         project.projectName,
       ],
