@@ -211,6 +211,10 @@ test("local status uses the credential and reports the server id of a password-p
     expect(await f.ok(["daemon", "status", "--home", home])).toMatchObject({
       connectedDaemon: "reachable",
       serverId: authenticated.serverId,
+      forkBuild: "djbclark fork 3",
+      features: expect.objectContaining({
+        acpElicitationForms: true,
+      }),
     });
   } finally {
     await f.close();
