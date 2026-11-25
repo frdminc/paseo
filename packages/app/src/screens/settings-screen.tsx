@@ -1641,6 +1641,11 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   })();
   const isDesktopSearchActive = !isCompactLayout && Boolean(settingsSearchInput.trim());
   const pageTitle = isDesktopSearchActive ? t("settings.searchResults") : detailTitle;
+  // A project or provider page draws its own title, which names the list it came from.
+  const desktopPageTitle =
+    !isDesktopSearchActive && (view.kind === "project" || view.kind === "provider")
+      ? undefined
+      : pageTitle;
 
   const pluginGalleryServerId =
     view.kind === "host" && view.section === "plugins" ? view.serverId : null;
@@ -1845,14 +1850,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
         <WindowChromeRegion corners="top-right">
           <View style={desktopStyles.contentPane} testID="settings-detail-pane">
             <PageLayout
-              // A project or provider page draws its own title, which names the list it came from.
-              title={
-                isDesktopSearchActive
-                  ? t("settings.searchResults")
-                  : view.kind === "project" || view.kind === "provider"
-                    ? undefined
-                    : detailTitle
-              }
+              title={desktopPageTitle}
               actions={detailActions}
               width={detailWidth}
               titleTestID="settings-detail-header-title"
