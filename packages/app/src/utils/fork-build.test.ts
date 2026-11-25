@@ -6,8 +6,9 @@ describe("fork build marker", () => {
     expect(formatForkBuild({ name: "djbclark", build: 2 })).toBe("djbclark fork 2");
   });
 
-  it("starts at build 2", () => {
-    expect(FORK_BUILD.build).toBeGreaterThanOrEqual(2);
+  it("is build 3", () => {
+    expect(FORK_BUILD.build).toBe(3);
+    expect(formatForkBuild(FORK_BUILD)).toBe("djbclark fork 3");
   });
 
   it("follows the version text on the About line", () => {
