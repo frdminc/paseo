@@ -217,6 +217,26 @@ describe("wire schema compatibility", () => {
     });
   });
 
+  test("server info accepts optional forkBuild and acpElicitationForms capability", () => {
+    const parsed = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "fork-server",
+      forkBuild: "djbclark fork 3",
+      features: {
+        acpElicitationForms: true,
+      },
+    });
+
+    expect(parsed).toEqual({
+      status: "server_info",
+      serverId: "fork-server",
+      hostname: null,
+      version: null,
+      forkBuild: "djbclark fork 3",
+      features: { acpElicitationForms: true },
+    });
+  });
+
   test("server info strips unknown legacy features while accepting former turn identity", () => {
     const parsed = ServerInfoStatusPayloadSchema.parse({
       status: "server_info",

@@ -52,6 +52,18 @@ export async function runStatusCommand(options: CommandOptions, _command: Comman
   };
 }
 
+function serverInfoFields(
+  info: ReturnType<Awaited<ReturnType<typeof connectToDaemon>>["getLastServerInfoMessage"]>,
+): Record<string, unknown> {
+  const fields: Record<string, unknown> = {
+    serverId: info?.serverId,
+    daemonVersion: info?.version,
+  };
+  if (info?.forkBuild) fields.forkBuild = info.forkBuild;
+  if (info?.features) fields.features = info.features;
+  return fields;
+}
+
 async function probeDaemonStatus(
   target: DaemonTarget,
   instance: Awaited<ReturnType<typeof readDaemonInstance>>,
@@ -85,8 +97,7 @@ async function probeDaemonStatus(
         "DAEMON_REPLACED",
         "Supervisor exited or was replaced during status observation.",
       );
-    const info = client.getLastServerInfoMessage();
-    live = { serverId: info?.serverId, daemonVersion: info?.version };
+    live = serverInfoFields(client.getLastServerInfoMessage());
     connectedDaemon = client.isConnected ? "reachable" : "unreachable";
     if (!status) {
       const failure = toCommandError(requestError);

@@ -4004,6 +4004,8 @@ export const ServerInfoStatusPayloadSchema = z
     permissions: z.array(DaemonPermissionSchema).optional(),
     // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
     desktopManaged: z.boolean().optional(),
+    // COMPAT(forkBuild): added in djbclark fork 3 (v0.17.4), optional fork build marker for runtime capability checks.
+    forkBuild: z.string().optional(),
     capabilities: ServerCapabilitiesFromUnknownSchema.optional(),
     // COMPAT(providersSnapshot): added in v0.1.48, remove gating when all clients use snapshot
     features: z
@@ -4252,6 +4254,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
+        // COMPAT(acpElicitationForms): added in djbclark fork 3 (v0.17.4), remove gate after 2027-05-25 once daemon floor supports ACP elicitation forms.
+        acpElicitationForms: z.boolean().optional(),
       })
       .optional(),
   })
