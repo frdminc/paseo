@@ -140,7 +140,9 @@ function scrollSidebarWeb(rowNode: View, scrollView: ScrollView | null): boolean
 /**
  * Scrolls the sidebar list so `rowNode` is centered in view, using direct scroll-container
  * math on web (avoiding `display: none` no-ops and outer ancestor scrolling) and React Native
- * `measureLayout` against an explicit `collapsable={false}` content container on native.
+ * `measureLayout` against the scroll view's inner host ref (`getInnerViewRef()`, falling back
+ * to `scrollContentRef` or legacy `getInnerViewNode()`) on native without wrapping `ScrollView`
+ * children (preserving `stickyHeaderIndices`).
  */
 export function scrollSidebarToRowNode(input: {
   rowNode: View;
@@ -158,9 +160,14 @@ export function scrollSidebarToRowNode(input: {
   if (!scrollView) {
     return false;
   }
+  const nativeScrollView = scrollView as unknown as {
+    getInnerViewRef?: () => unknown;
+    getInnerViewNode?: () => unknown;
+  };
   const relativeContainer =
     scrollContentRef?.current ??
-    (scrollView as unknown as { getInnerViewNode?: () => unknown }).getInnerViewNode?.();
+    nativeScrollView.getInnerViewRef?.() ??
+    nativeScrollView.getInnerViewNode?.();
   const measureLayout = (
     rowNode as unknown as {
       measureLayout?: (

@@ -62,6 +62,7 @@ import {
   type AppSettings,
   type Settings as EffectiveSettings,
 } from "@/hooks/use-settings";
+import { useAgentProfiles } from "@/agent-profiles";
 import { useHostRuntimeIsConnected, useHosts } from "@/runtime/host-runtime";
 import { useSessionStore } from "@/stores/session-store";
 import {
@@ -529,16 +530,34 @@ function renderHostSettingsContent(
   }
 }
 
-function AgentProfilesSearchResultCard({ onOpen }: { onOpen: () => void }) {
+function AgentProfilesSearchResultCard({
+  serverId,
+  onOpen,
+}: {
+  serverId: string;
+  onOpen: () => void;
+}) {
   const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { profiles, isSupported } = useAgentProfiles(serverId);
+
+  let description: string;
+  if (!isConnected) {
+    description = t("settings.host.agentProfiles.unavailable");
+  } else if (!isSupported) {
+    description = t("settings.host.agentProfiles.unsupported");
+  } else if (profiles && profiles.length > 0) {
+    description = profiles.map((profile) => profile.name).join(", ");
+  } else {
+    description = t("settings.host.agentProfiles.emptyState");
+  }
+
   return (
     <SettingsSection title={t("settings.host.agentProfiles.sectionTitle")}>
       <View style={settingsStyles.card}>
         <View style={settingsStyles.row}>
           <View style={settingsStyles.rowContent}>
-            <Text style={settingsStyles.rowHint}>
-              {t("settings.host.agentProfiles.emptyState")}
-            </Text>
+            <Text style={settingsStyles.rowHint}>{description}</Text>
           </View>
           <Button variant="secondary" onPress={onOpen}>
             {t("settings.plugins.screens.open")}
@@ -556,7 +575,7 @@ function renderHostSearchEntry(
   onOpenAgentProfiles: () => void,
 ): ReactNode {
   if (entry.section === "agent-profiles") {
-    return <AgentProfilesSearchResultCard onOpen={onOpenAgentProfiles} />;
+    return <AgentProfilesSearchResultCard serverId={serverId} onOpen={onOpenAgentProfiles} />;
   }
   if (entry.id === "agents" || entry.id === "agents.skills") {
     const group: HostAgentsSearchGroup = entry.id === "agents" ? "runtime" : "skills";
@@ -1934,11 +1953,25 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
     view.kind === "host" && view.section === "plugins" ? view.serverId : null;
   const detailActions = useMemo(
     () =>
-      pluginGalleryServerId ? <PluginGalleryMenu serverId={pluginGalleryServerId} /> : undefined,
-    [pluginGalleryServerId],
+      !isDesktopSearchActive && pluginGalleryServerId ? (
+        <PluginGalleryMenu serverId={pluginGalleryServerId} />
+      ) : undefined,
+    [isDesktopSearchActive, pluginGalleryServerId],
   );
   // The gallery and a plugin's page share one width, so opening a plugin keeps the page edges put.
-  const detailWidth = pluginGalleryServerId || pluginPage ? "wide" : "default";
+  const detailWidth =
+    !isDesktopSearchActive && (pluginGalleryServerId || pluginPage) ? "wide" : "default";
+
+  const handleDesktopSearchInputChange = useCallback(
+    (nextValue: string) => {
+      if (!settingsSearchInput.trim() && nextValue.trim()) {
+        guardNavigation(() => setSettingsSearchInput(nextValue));
+        return;
+      }
+      setSettingsSearchInput(nextValue);
+    },
+    [guardNavigation, settingsSearchInput],
+  );
 
   const handleOpenAgentProfilesFromSearch = useCallback(() => {
     setSettingsSearchInput("");
@@ -2120,7 +2153,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
               layout="desktop"
               searchInput={settingsSearchInput}
               searchResults={settingsSearchResults}
-              onSearchInputChange={setSettingsSearchInput}
+              onSearchInputChange={handleDesktopSearchInputChange}
             />
           </WindowChromeRegion>
         )}

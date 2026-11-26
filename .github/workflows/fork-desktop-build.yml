@@ -197,6 +197,7 @@ jobs:
             src/components/status-ring/geometry.test.ts \
             src/utils/paseo-deep-link.test.ts src/navigation/native-intent.test.ts \
             src/hooks/use-reveal-workspace-in-sidebar.test.ts src/stores/sidebar-reveal-store.test.ts \
+            src/components/sidebar/sidebar-reveal-context.test.ts \
             --reporter=default --reporter=junit \
             --outputFile.junit=${{ github.workspace }}/evidence/app-local-junit.xml
 
