@@ -152,9 +152,28 @@ import {
 const WS_CLOSE_DAEMON_AUTH_FAILED = 4401;
 // Give clients intermediate messages that count as progress during large transfers.
 const DIRECT_WEBSOCKET_FRAME_BYTES = 512 * 1024;
+// Bound direct WebSocket frames (including inflated permessage-deflate payloads)
+// until hello admission completes, preventing pre-auth 100 MiB decompression bombs.
+const PRE_HELLO_MAX_WEBSOCKET_MESSAGE_BYTES = 64 * 1024;
+
+interface InternalWebSocketLimits {
+  _receiver?: { _maxPayload?: number };
+  _extensions?: Record<string, { _maxPayload?: number } | undefined>;
+}
+
+function setDirectWebSocketMaxPayload(ws: WebSocketLike, maxPayload: number): void {
+  const internal = ws as unknown as InternalWebSocketLimits;
+  if (internal._receiver && typeof internal._receiver._maxPayload === "number") {
+    internal._receiver._maxPayload = maxPayload;
+  }
+  const deflate = internal._extensions?.["permessage-deflate"];
+  if (deflate && typeof deflate._maxPayload === "number") {
+    deflate._maxPayload = maxPayload;
+  }
+}
 
 // Compress large JSON/timeline frames over direct WebSockets while skipping
-// tiny pings/keystrokes and avoiding per-connection persistent zlib contexts.
+// tiny pings/keystrokes and resetting zlib dictionaries per message.
 export const WEBSOCKET_PER_MESSAGE_DEFLATE_OPTIONS: PerMessageDeflateOptions = {
   threshold: 1024,
   zlibDeflateOptions: {
@@ -955,7 +974,7 @@ export class VoiceAssistantWebSocketServer {
     const wss = new WebSocketServer({
       server,
       path: "/ws",
-      maxPayload: MAX_WEBSOCKET_MESSAGE_BYTES,
+      maxPayload: PRE_HELLO_MAX_WEBSOCKET_MESSAGE_BYTES,
       perMessageDeflate: WEBSOCKET_PER_MESSAGE_DEFLATE_OPTIONS,
       handleProtocols: (protocols) => selectWebSocketProtocol(protocols, password),
       verifyClient: ({ req }, callback) => {
@@ -1855,7 +1874,7 @@ export class VoiceAssistantWebSocketServer {
     }
 
     pending.authenticating = true;
-    if (!pending.admission && !(await this.admitPendingHello(ws, message, pending))) return;
+    if (!(await this.admitHelloAndRaisePayloadLimit(ws, message, pending))) return;
 
     const clientId = message.clientId.trim();
     if (clientId.length === 0) {
@@ -1956,6 +1975,25 @@ export class VoiceAssistantWebSocketServer {
         }
       }
     });
+  }
+
+  private async admitHelloAndRaisePayloadLimit(
+    ws: WebSocketLike,
+    message: WSHelloMessage,
+    pending: PendingConnection,
+  ): Promise<boolean> {
+    const pausable = ws as { pause?: () => void; resume?: () => void };
+    pausable.pause?.();
+    let admitted = false;
+    try {
+      admitted = Boolean(pending.admission) || (await this.admitPendingHello(ws, message, pending));
+      return admitted;
+    } finally {
+      if (admitted) {
+        setDirectWebSocketMaxPayload(ws, MAX_WEBSOCKET_MESSAGE_BYTES);
+      }
+      pausable.resume?.();
+    }
   }
 
   private async admitPendingHello(
