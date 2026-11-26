@@ -1120,12 +1120,16 @@ export function createWorkspaceLayoutStore(
         panelRevisionByWorkspace: {},
         pendingOpenByWorkspace: {},
         deferOpenTab: (input) => {
-          set((state) => ({
-            pendingOpenByWorkspace: {
-              ...state.pendingOpenByWorkspace,
-              [input.workspaceKey]: input,
-            },
-          }));
+          set((state) => {
+            const next = { ...state.pendingOpenByWorkspace, [input.workspaceKey]: input };
+            const keys = Object.keys(next);
+            if (keys.length > 16) {
+              for (const staleKey of keys.slice(0, keys.length - 16)) {
+                delete next[staleKey];
+              }
+            }
+            return { pendingOpenByWorkspace: next };
+          });
           return null;
         },
         consumePendingOpen: (workspaceKey) => {

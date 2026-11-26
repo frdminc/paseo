@@ -1,25 +1,92 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  buildPaseoDeepLink,
+  parsePaseoDeepLink,
+  type PaseoDeepLink,
+} from "@getpaseo/protocol/deep-link";
+import { useToast } from "@/contexts/toast-context";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { getDesktopHost } from "@/desktop/host";
 import { useStableEvent } from "@/hooks/use-stable-event";
-import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { useHostRegistryLoaded } from "@/runtime/host-runtime";
+import { openPaseoDeepLink } from "@/utils/paseo-deep-link";
 
-interface OpenAgentEventPayload {
-  serverId?: unknown;
-  agentId?: unknown;
+type DesktopDeepLinkEventPayload =
+  | PaseoDeepLink
+  | {
+      kind?: unknown;
+      serverId?: unknown;
+      agentId?: unknown;
+      workspaceId?: unknown;
+      terminalId?: unknown;
+      path?: unknown;
+      lineStart?: unknown;
+      lineEnd?: unknown;
+      focusPath?: unknown;
+      sha?: unknown;
+      pluginId?: unknown;
+      panelId?: unknown;
+    };
+
+function normalizeDesktopDeepLinkPayload(
+  payload: DesktopDeepLinkEventPayload | null,
+): PaseoDeepLink | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  // Legacy agent-only payloads from older desktop main processes omit `kind`.
+  const normalizedInput: PaseoDeepLink =
+    payload.kind === undefined
+      ? {
+          kind: "agent",
+          serverId: typeof payload.serverId === "string" ? payload.serverId : "",
+          agentId: typeof payload.agentId === "string" ? payload.agentId : "",
+        }
+      : (payload as PaseoDeepLink);
+
+  // Re-validate all IPC payloads through the canonical builder + parser so malformed data
+  // (including legacy payloads) cannot bypass deep-link invariants.
+  try {
+    const candidate = buildPaseoDeepLink(normalizedInput);
+    return parsePaseoDeepLink(candidate);
+  } catch {
+    return null;
+  }
 }
 
 export function AgentNavigationListener() {
-  const openAgent = useStableEvent((payload: OpenAgentEventPayload | null) => {
-    const serverId = typeof payload?.serverId === "string" ? payload.serverId.trim() : "";
-    const agentId = typeof payload?.agentId === "string" ? payload.agentId.trim() : "";
-    if (!serverId || !agentId) {
+  const toast = useToast();
+  const hostRegistryLoaded = useHostRegistryLoaded();
+  const [bufferedTargets, setBufferedTargets] = useState<PaseoDeepLink[]>([]);
+
+  const handleDesktopDeepLink = useStableEvent((payload: DesktopDeepLinkEventPayload | null) => {
+    const target = normalizeDesktopDeepLinkPayload(payload);
+    if (!target) {
       return;
     }
-    navigateToAgent({ serverId, agentId });
+    if (!hostRegistryLoaded) {
+      setBufferedTargets((current) => [...current.slice(-7), target]);
+      return;
+    }
+    openPaseoDeepLink(target, { toast });
   });
 
   useEffect(() => {
+    if (!hostRegistryLoaded || bufferedTargets.length === 0) {
+      return;
+    }
+    const targets = bufferedTargets;
+    setBufferedTargets([]);
+    for (const target of targets) {
+      openPaseoDeepLink(target, { toast });
+    }
+  }, [bufferedTargets, hostRegistryLoaded, toast]);
+
+  useEffect(() => {
+    if (!hostRegistryLoaded) {
+      return;
+    }
     const host = getDesktopHost();
     const ready = host?.agentNavigation?.ready;
     if (typeof host?.events?.on !== "function" || typeof ready !== "function") {
@@ -33,7 +100,10 @@ export function AgentNavigationListener() {
     const connect = async () => {
       let dispose: (() => void) | null = null;
       try {
-        dispose = await listenToDesktopEvent<OpenAgentEventPayload>("open-agent", openAgent);
+        dispose = await listenToDesktopEvent<DesktopDeepLinkEventPayload>(
+          "open-agent",
+          handleDesktopDeepLink,
+        );
         if (disposed) {
           dispose();
           return;
@@ -41,7 +111,7 @@ export function AgentNavigationListener() {
         unlisten = dispose;
         const pending = await ready();
         if (!disposed && pending) {
-          openAgent(pending);
+          handleDesktopDeepLink(pending as DesktopDeepLinkEventPayload);
         }
       } catch {
         dispose?.();
@@ -63,7 +133,7 @@ export function AgentNavigationListener() {
       }
       unlisten?.();
     };
-  }, [openAgent]);
+  }, [handleDesktopDeepLink, hostRegistryLoaded]);
 
   return null;
 }
