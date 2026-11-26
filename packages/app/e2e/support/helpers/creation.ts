@@ -298,7 +298,14 @@ export async function createCreationScenario(page: Page) {
         });
       }
       await expect(workspaceDeckEntryLocator(page, getServerId(), workspaceId)).toHaveCount(0);
-      await revealSidebarProjectWorkspaces(page, project.projectKey);
+      // Lower deck-retention caps create fewer eviction workspaces than the sidebar collapse limit.
+      if (
+        !(await page
+          .getByTestId(`sidebar-workspace-row-${getServerId()}:${workspaceId}`)
+          .isVisible())
+      ) {
+        await revealSidebarProjectWorkspaces(page, project.projectKey);
+      }
       await switchWorkspaceViaSidebar({ page, serverId: getServerId(), workspaceId });
       await page
         .getByTestId(draftTestId!)
