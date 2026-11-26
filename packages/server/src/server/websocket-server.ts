@@ -163,7 +163,6 @@ interface InternalWebSocketLimits {
 }
 
 function setDirectWebSocketMaxPayload(ws: WebSocketLike, maxPayload: number): void {
-  if (!(ws instanceof WebSocket)) return;
   const internal = ws as unknown as InternalWebSocketLimits;
   if (internal._receiver && typeof internal._receiver._maxPayload === "number") {
     internal._receiver._maxPayload = maxPayload;
@@ -612,6 +611,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly wss: WebSocketServer;
   private readonly hostLinks = new Map<WebSocketLike, DaemonLinkEndpoint>();
   private readonly pendingConnections: Map<WebSocketLike, PendingConnection> = new Map();
+  private readonly directSockets = new WeakSet<WebSocketLike>();
   private readonly sessions: Map<WebSocketLike, SessionConnection> = new Map();
   private readonly socketLocalEndpoints = new WeakMap<object, string>();
   private readonly socketIdentities: Map<WebSocketLike, WebSocketConnectionIdentity> = new Map();
@@ -993,6 +993,7 @@ export class VoiceAssistantWebSocketServer {
     });
     wss.on("connection", (ws, request) => {
       const socket = Object.assign(ws, { maxFrameBytes: DIRECT_WEBSOCKET_FRAME_BYTES });
+      this.directSockets.add(socket);
       void this.attachAuthenticatedSocket(socket, request, password);
     });
     return wss;
@@ -1883,7 +1884,7 @@ export class VoiceAssistantWebSocketServer {
 
     pending.authenticating = true;
     if (pending.admission) {
-      setDirectWebSocketMaxPayload(ws, MAX_WEBSOCKET_MESSAGE_BYTES);
+      this.raiseDirectWebSocketMaxPayload(ws);
     } else if (!(await this.admitHelloAndRaisePayloadLimit(ws, message, pending))) {
       return;
     }
@@ -1989,22 +1990,29 @@ export class VoiceAssistantWebSocketServer {
     });
   }
 
+  private raiseDirectWebSocketMaxPayload(ws: WebSocketLike): void {
+    if (this.directSockets.has(ws)) {
+      setDirectWebSocketMaxPayload(ws, MAX_WEBSOCKET_MESSAGE_BYTES);
+    }
+  }
+
   private async admitHelloAndRaisePayloadLimit(
     ws: WebSocketLike,
     message: WSHelloMessage,
     pending: PendingConnection,
   ): Promise<boolean> {
-    const directSocket = ws instanceof WebSocket ? ws : null;
-    directSocket?.pause();
+    const isDirect = this.directSockets.has(ws);
+    const pausable = isDirect ? (ws as { pause?: () => void; resume?: () => void }) : null;
+    pausable?.pause?.();
     let admitted = false;
     try {
       admitted = await this.admitPendingHello(ws, message, pending);
       return admitted;
     } finally {
       if (admitted) {
-        setDirectWebSocketMaxPayload(ws, MAX_WEBSOCKET_MESSAGE_BYTES);
+        this.raiseDirectWebSocketMaxPayload(ws);
       }
-      directSocket?.resume();
+      pausable?.resume?.();
     }
   }
 
