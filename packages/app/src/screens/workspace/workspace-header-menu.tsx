@@ -127,27 +127,6 @@ function WorkspaceHeaderWorkspaceActionItems({
   const { t } = useTranslation();
   return (
     <>
-      {canPin && onTogglePin ? (
-        <DropdownMenuItem
-          testID="workspace-header-toggle-pin"
-          leading={isPinned ? MENU_UNPIN_ICON : MENU_PIN_ICON}
-          onSelect={onTogglePin}
-        >
-          {isPinned
-            ? t("workspace.header.actions.unpinWorkspace")
-            : t("workspace.header.actions.pinWorkspace")}
-        </DropdownMenuItem>
-      ) : null}
-      {onRevealInSidebar ? (
-        <DropdownMenuItem
-          testID="workspace-header-reveal-in-sidebar"
-          leading={MENU_LOCATE_ICON}
-          onSelect={onRevealInSidebar}
-        >
-          {t("workspace.header.actions.revealInSidebar")}
-        </DropdownMenuItem>
-      ) : null}
-      {(canPin && onTogglePin) || onRevealInSidebar ? <DropdownMenuSeparator /> : null}
       <DropdownMenuItem
         testID="workspace-header-copy-path"
         leading={MENU_COPY_ICON}
@@ -173,6 +152,27 @@ function WorkspaceHeaderWorkspaceActionItems({
       >
         {t("workspace.header.actions.importSession")}
       </DropdownMenuItem>
+      {(canPin && onTogglePin) || onRevealInSidebar ? <DropdownMenuSeparator /> : null}
+      {canPin && onTogglePin ? (
+        <DropdownMenuItem
+          testID="workspace-header-toggle-pin"
+          leading={isPinned ? MENU_UNPIN_ICON : MENU_PIN_ICON}
+          onSelect={onTogglePin}
+        >
+          {isPinned
+            ? t("workspace.header.actions.unpinWorkspace")
+            : t("workspace.header.actions.pinWorkspace")}
+        </DropdownMenuItem>
+      ) : null}
+      {onRevealInSidebar ? (
+        <DropdownMenuItem
+          testID="workspace-header-reveal-in-sidebar"
+          leading={MENU_LOCATE_ICON}
+          onSelect={onRevealInSidebar}
+        >
+          {t("workspace.header.actions.revealInSidebar")}
+        </DropdownMenuItem>
+      ) : null}
       {showWorkspaceSetup ? (
         <>
           <DropdownMenuSeparator />
