@@ -2,7 +2,7 @@ name: Fork Desktop Build
 
 on:
   push:
-    branches: ["local/main-desktop-v0173-fork2-20261122"]
+    branches: ["local/main-desktop-v0174-fork3-20261125"]
 
 permissions:
   contents: read
@@ -30,11 +30,11 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_EVENT_NAME" = push
-          test "$GITHUB_REF" = refs/heads/local/main-desktop-v0173-fork2-20261122
+          test "$GITHUB_REF" = refs/heads/local/main-desktop-v0174-fork3-20261125
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(uname -s)" = Darwin
           test "$(uname -m)" = arm64
-          git merge-base --is-ancestor dd7c0499a8c311fae7b3244722a64d73cc178e4a HEAD
+          git merge-base --is-ancestor 2b3559b107243306986176b80beb0e779f9fe53e HEAD
           git merge-base --is-ancestor 68cfad2c8a482bc9fc8901d8bdd9d9395cc56f8e HEAD
           mkdir -p evidence
 
@@ -72,7 +72,7 @@ jobs:
               "ref": os.environ["GITHUB_REF"],
               "sha": command("git", "rev-parse", "HEAD"),
               "tree": command("git", "rev-parse", "HEAD^{tree}"),
-              "base": "dd7c0499a8c311fae7b3244722a64d73cc178e4a",
+              "base": "2b3559b107243306986176b80beb0e779f9fe53e",
               "selectedPatches": [
                   "cacbf1e145731786726c0d7d623a6abc4fb788c0",
                   "c50c53583e935b0c9ab883f90ab197dfdf05bc46",
@@ -183,10 +183,15 @@ jobs:
           npm run test --workspace=@getpaseo/plugin -- src/server/acp.test.ts \
             --maxWorkers=1 --reporter=default --reporter=junit \
             --outputFile.junit=${{ github.workspace }}/evidence/plugin-acp-junit.xml
+          npm run test --workspace=@getpaseo/protocol -- src/messages.wire-compat.test.ts
+          npm run test:unit --workspace=@getpaseo/server -- src/server/agent-history-search.test.ts --maxWorkers=1
           npm run test --workspace=@getpaseo/app -- \
             src/sidebar-nav/share.test.ts src/components/resize-handle-share.test.ts \
             src/command-center/workspace-search.test.ts src/utils/fork-build.test.ts \
             src/ordering/layout.test.ts src/ordering/replica.test.ts \
+            src/screens/settings/settings-search-index.test.ts \
+            src/screens/workspace/workspace-deck-retention.test.ts \
+            src/components/status-ring/geometry.test.ts \
             --reporter=default --reporter=junit \
             --outputFile.junit=${{ github.workspace }}/evidence/app-local-junit.xml
 
