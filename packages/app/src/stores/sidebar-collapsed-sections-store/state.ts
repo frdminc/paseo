@@ -26,6 +26,16 @@ export function togglePinnedCollapsed(state: CollapsedProjectsState): CollapsedP
   return { ...state, collapsedPinned: !state.collapsedPinned };
 }
 
+export function setPinnedCollapsed(
+  state: CollapsedProjectsState,
+  collapsed: boolean,
+): CollapsedProjectsState {
+  if (state.collapsedPinned === collapsed) {
+    return state;
+  }
+  return { ...state, collapsedPinned: collapsed };
+}
+
 export function toggleProjectCollapsed(
   state: CollapsedProjectsState,
   projectKey: string,
@@ -64,6 +74,24 @@ export function setProjectCollapsed(
     next.delete(projectKey);
   }
   return { ...state, collapsedProjectKeys: next };
+}
+
+export function setWorkspaceGroupCollapsed(
+  state: CollapsedProjectsState,
+  workspaceGroupKey: string,
+  collapsed: boolean,
+): CollapsedProjectsState {
+  const hasKey = state.collapsedWorkspaceGroupKeys.has(workspaceGroupKey);
+  if (hasKey === collapsed) {
+    return state;
+  }
+  const next = new Set(state.collapsedWorkspaceGroupKeys);
+  if (collapsed) {
+    next.add(workspaceGroupKey);
+  } else {
+    next.delete(workspaceGroupKey);
+  }
+  return { ...state, collapsedWorkspaceGroupKeys: next };
 }
 
 export function serializeCollapsedProjects(state: CollapsedProjectsState): {

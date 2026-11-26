@@ -10,6 +10,13 @@ import { useSidebarWorkspaceEntries } from "@/hooks/use-sidebar-workspace-entrie
 import { usePinnedSidebarKeys, type PinnedSidebarGroups } from "@/hooks/use-sidebar-pins";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 import {
+  resolveRevealSidebarPlan,
+  useSidebarRevealStore,
+  type RevealSidebarPlan,
+} from "@/stores/sidebar-reveal-store";
+import { useSessionStore } from "@/stores/session-store";
+import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
+import {
   hasActiveSidebarLabelFilter,
   useSidebarViewStore,
   type SidebarGroupMode,
@@ -44,6 +51,32 @@ interface SidebarModel extends SidebarWorkspacesListResult {
   collapsedProjectKeys: ReadonlySet<string>;
   toggleProjectCollapsed: (projectViewKey: string) => void;
   shortcutModel: SidebarShortcutModel;
+}
+
+function applyRevealSidebarPlan(plan: RevealSidebarPlan): void {
+  const viewState = useSidebarViewStore.getState();
+  const collapsedState = useSidebarCollapsedSectionsStore.getState();
+  if (plan.includeHostServerId) {
+    viewState.toggleHostFilter(plan.includeHostServerId);
+  }
+  if (plan.includeProjectViewKey) {
+    viewState.toggleProjectFilter(plan.includeProjectViewKey);
+  }
+  if (plan.enableShowBackground) {
+    viewState.toggleBackground();
+  }
+  if (plan.clearLabelFilter) {
+    viewState.clearLabelFilter();
+  }
+  if (plan.expandPinnedSection) {
+    collapsedState.setPinnedCollapsed(false);
+  }
+  if (plan.expandProjectViewKey) {
+    collapsedState.setProjectCollapsed(plan.expandProjectViewKey, false);
+  }
+  if (plan.expandWorkspaceGroupKey) {
+    collapsedState.setWorkspaceGroupCollapsed(plan.expandWorkspaceGroupKey, false);
+  }
 }
 
 const SidebarModelContext = createContext<SidebarModel | null>(null);
@@ -179,6 +212,86 @@ export function SidebarModelProvider({
     ],
   );
   const projection = useMemo(() => buildSidebarProjection(projectionInput), [projectionInput]);
+  const revealRequest = useSidebarRevealStore((state) => state.request);
+
+  useEffect(() => {
+    if (!revealRequest) {
+      return;
+    }
+    const { serverId, workspaceId, workspaceKey } = revealRequest;
+    const viewState = useSidebarViewStore.getState();
+    const collapsedState = useSidebarCollapsedSectionsStore.getState();
+
+    // Find owning project across all projects (before project/label filters)
+    let projectViewKey: string | null = null;
+    for (const project of list.projects) {
+      if (project.workspaces.some((workspace) => workspace.workspaceKey === workspaceKey)) {
+        projectViewKey = project.viewKey;
+        break;
+      }
+    }
+
+    // Check whether the workspace is a background workspace directly from session state,
+    // resolving opaque route IDs through the canonical identity helper.
+    const sessionWorkspaces = useSessionStore.getState().sessions[serverId]?.workspaces;
+    const resolvedMapKey = resolveWorkspaceMapKeyByIdentity({
+      workspaces: sessionWorkspaces,
+      workspaceId,
+    });
+    const sessionWorkspace =
+      resolvedMapKey && sessionWorkspaces ? (sessionWorkspaces.get(resolvedMapKey) ?? null) : null;
+    const isBackgroundWorkspace = Boolean(sessionWorkspace?.background);
+    const isPinned =
+      projection.pinnedGroups.pinnedChats.some((item) => item.workspaceKey === workspaceKey) ||
+      sessionWorkspace?.pinnedAt != null;
+
+    // Find owning status/grouped section key if in grouped mode
+    let statusGroupKey: string | null = null;
+    for (const group of projection.workspaceGroups) {
+      if (group.rows.some((row) => row.workspaceKey === workspaceKey)) {
+        statusGroupKey = group.key;
+        break;
+      }
+    }
+
+    // Only clear label filters when the workspace is already hydrated and proven excluded by the
+    // active label filter — never while another host's directory is still hydrating.
+    const hydratedEntry = workspaceEntriesByKey.get(workspaceKey) ?? null;
+    const excludedByLabelFilter =
+      hydratedEntry !== null &&
+      hasActiveSidebarLabelFilter(viewState.labelFilter) &&
+      filterWorkspacesByLabels({
+        workspaces: [hydratedEntry],
+        ...viewState.labelFilter,
+      }).length === 0;
+
+    const plan = resolveRevealSidebarPlan({
+      serverId,
+      workspaceKey,
+      groupMode: viewState.groupMode,
+      hostFilters: viewState.hostFilters,
+      resolvedProjectFilters,
+      labelFilter: viewState.labelFilter,
+      showBackground: viewState.showBackground,
+      isBackgroundWorkspace,
+      excludedByLabelFilter,
+      isPinned,
+      projectViewKey,
+      statusGroupKey,
+      collapsedPinned: collapsedState.collapsedPinned,
+      collapsedProjectKeys: collapsedState.collapsedProjectKeys,
+      collapsedWorkspaceGroupKeys: collapsedState.collapsedWorkspaceGroupKeys,
+    });
+    applyRevealSidebarPlan(plan);
+  }, [
+    list.projects,
+    projection.pinnedGroups.pinnedChats,
+    projection.workspaceGroups,
+    resolvedProjectFilters,
+    revealRequest,
+    workspaceEntriesByKey,
+  ]);
+
   const value = useMemo(
     () => ({
       ...list,

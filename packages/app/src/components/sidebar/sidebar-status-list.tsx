@@ -7,9 +7,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type MutableRefObject,
   type ReactNode,
-  type Ref,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { View, Text, ScrollView } from "react-native";
@@ -65,6 +65,16 @@ import {
   type SidebarWorkspaceTrailing,
 } from "@/components/sidebar/workspace-trailing";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
+import {
+  useIsSidebarWorkspaceRevealHighlighted,
+  useSidebarRevealStore,
+} from "@/stores/sidebar-reveal-store";
+import {
+  SidebarRevealHighlightOverlay,
+  scrollSidebarToRowNode,
+  useMergedSidebarRevealRowRef,
+  useSidebarRevealRowRegistry,
+} from "@/components/sidebar/sidebar-reveal-context";
 import {
   SidebarWorkspaceContextMenu,
   SidebarWorkspaceMenu,
@@ -345,25 +355,147 @@ export function SidebarStatusWorkspaceList({
     </>
   );
 
+  const revealRowRegistry = useSidebarRevealRowRegistry();
+  const revealRequest = useSidebarRevealStore((state) => state.request);
+  const clearRevealRequest = useSidebarRevealStore((state) => state.clearRequest);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollContentRef = useRef<View | null>(null);
+  const scrollViewportHeightRef = useRef(0);
+  const handleScrollLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!revealRequest) {
+      return;
+    }
+    const { workspaceKey } = revealRequest;
+    const isInPinned = pinnedWorkspaces.some((item) => item.workspaceKey === workspaceKey);
+    if (isInPinned && !pinnedWorkspacesExpanded) {
+      const visibleInPinned =
+        leadingPinnedWorkspace?.workspaceKey === workspaceKey ||
+        visiblePinnedWorkspaces.some((item) => item.workspaceKey === workspaceKey);
+      if (!visibleInPinned) {
+        setPinnedWorkspacesExpanded(true);
+        return;
+      }
+    }
+    if (!isInPinned) {
+      for (const group of groups) {
+        if (!group.rows.some((item) => item.workspaceKey === workspaceKey)) {
+          continue;
+        }
+        if (!expandedGroupKeys.has(group.key)) {
+          const { leadingItem, visibleItems } = selectSidebarGroupVisibility({
+            items: group.rows,
+            selection: activeWorkspaceSelection,
+            expanded: false,
+            policy: STATUS_GROUP_VISIBILITY,
+          });
+          const isVisible =
+            leadingItem?.workspaceKey === workspaceKey ||
+            visibleItems.some((item) => item.workspaceKey === workspaceKey);
+          if (!isVisible) {
+            setExpandedGroupKeys((current) => {
+              const next = new Set(current);
+              next.add(group.key);
+              return next;
+            });
+            return;
+          }
+        }
+        break;
+      }
+    }
+  }, [
+    activeWorkspaceSelection,
+    expandedGroupKeys,
+    groups,
+    leadingPinnedWorkspace,
+    pinnedWorkspaces,
+    pinnedWorkspacesExpanded,
+    revealRequest,
+    visiblePinnedWorkspaces,
+  ]);
+
+  useEffect(() => {
+    if (!revealRequest || !revealRowRegistry) {
+      return;
+    }
+    let cancelled = false;
+    let attempts = 0;
+    let frameId: number | null = null;
+    const MAX_ATTEMPTS = 24;
+
+    const tryScroll = () => {
+      if (cancelled) return;
+      const rowNode = revealRowRegistry.getRowNode(revealRequest.workspaceKey);
+      if (
+        rowNode &&
+        scrollSidebarToRowNode({
+          rowNode,
+          scrollViewRef,
+          scrollContentRef,
+          viewportHeight: scrollViewportHeightRef.current,
+        })
+      ) {
+        clearRevealRequest(revealRequest.requestId);
+        return;
+      }
+      attempts += 1;
+      if (attempts < MAX_ATTEMPTS) {
+        frameId = requestAnimationFrame(tryScroll);
+      } else {
+        clearRevealRequest(revealRequest.requestId);
+      }
+    };
+
+    frameId = requestAnimationFrame(tryScroll);
+    return () => {
+      cancelled = true;
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [
+    clearRevealRequest,
+    collapsedWorkspaceGroupKeys,
+    expandedGroupKeys,
+    groups,
+    pinnedCollapsed,
+    pinnedWorkspacesExpanded,
+    revealRequest,
+    revealRowRegistry,
+  ]);
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={handleScrollLayout}>
       {platformIsNative ? (
         <NestableScrollContainer
+          ref={scrollViewRef as unknown as ComponentProps<typeof NestableScrollContainer>["ref"]}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           testID="sidebar-status-list-scroll"
         >
-          {content}
+          <View ref={scrollContentRef} collapsable={false}>
+            {content}
+          </View>
         </NestableScrollContainer>
       ) : (
         <ScrollView
+          ref={scrollViewRef}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           testID="sidebar-status-list-scroll"
         >
-          {content}
+          <View ref={scrollContentRef} collapsable={false}>
+            {content}
+          </View>
         </ScrollView>
       )}
     </View>
@@ -926,6 +1058,11 @@ function StatusWorkspaceRowInnerContent({
   );
   const isEditingTitle = titleEditor !== null;
   const disableDrag = isEditingTitle || isSelectionMode;
+  const isRevealHighlighted = useIsSidebarWorkspaceRevealHighlighted(workspace.workspaceKey);
+  const mergedRowRef = useMergedSidebarRevealRowRef(
+    workspace.workspaceKey,
+    dragHandleProps?.setActivatorNodeRef,
+  );
   const didLongPressRef = dragInteraction?.didLongPressRef;
   const startDragPress = dragInteraction?.handlePressIn;
   const moveDragPress = dragInteraction?.handleTouchMove;
@@ -983,7 +1120,7 @@ function StatusWorkspaceRowInnerContent({
           <View
             {...dragAttributes}
             {...(disableDrag ? null : dragHandleProps?.listeners)}
-            ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
+            ref={mergedRowRef}
             style={styles.workspaceRowContainer}
             {...hoverHandlers}
           >
@@ -1068,6 +1205,9 @@ function StatusWorkspaceRowInnerContent({
               </SidebarWorkspaceRowContent>
               {feedback}
             </SidebarWorkspaceContextMenu>
+            {isRevealHighlighted ? (
+              <SidebarRevealHighlightOverlay workspaceKey={workspace.workspaceKey} />
+            ) : null}
           </View>
         );
       }}

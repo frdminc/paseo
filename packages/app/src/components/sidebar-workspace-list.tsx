@@ -54,6 +54,17 @@ import {
   type ToggleSidebarWorkspacePin,
 } from "@/hooks/use-sidebar-workspace-pin";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
+import {
+  useIsSidebarWorkspaceRevealHighlighted,
+  useSidebarRevealStore,
+} from "@/stores/sidebar-reveal-store";
+import {
+  SidebarRevealHighlightOverlay,
+  SidebarRevealRowRegistryProvider,
+  scrollSidebarToRowNode,
+  useMergedSidebarRevealRowRef,
+  useSidebarRevealRowRegistry,
+} from "@/components/sidebar/sidebar-reveal-context";
 import { useHostFeatureMap } from "@/runtime/host-features";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useProjectIcons } from "@/projects/icons";
@@ -1130,6 +1141,11 @@ function WorkspaceRowInner({
   );
   const isEditingTitle = titleEditor !== null;
   const disableDrag = isEditingTitle || isSelectionMode;
+  const isRevealHighlighted = useIsSidebarWorkspaceRevealHighlighted(workspace.workspaceKey);
+  const mergedRowRef = useMergedSidebarRevealRowRef(
+    workspace.workspaceKey,
+    dragHandleProps?.setActivatorNodeRef,
+  );
 
   return (
     <SidebarWorkspaceRowFrame
@@ -1156,7 +1172,7 @@ function WorkspaceRowInner({
           <View
             {...dragAttributes}
             {...(disableDrag ? null : dragHandleProps?.listeners)}
-            ref={dragHandleProps?.setActivatorNodeRef as unknown as Ref<View>}
+            ref={mergedRowRef}
             style={styles.workspaceRowContainer}
             {...hoverHandlers}
           >
@@ -1239,6 +1255,9 @@ function WorkspaceRowInner({
               </SidebarWorkspaceRowContent>
               {feedback}
             </SidebarWorkspaceContextMenu>
+            {isRevealHighlighted ? (
+              <SidebarRevealHighlightOverlay workspaceKey={workspace.workspaceKey} />
+            ) : null}
           </View>
         );
       }}
@@ -2090,7 +2109,7 @@ export function SidebarWorkspaceList({
       />
     );
 
-  return content;
+  return <SidebarRevealRowRegistryProvider>{content}</SidebarRevealRowRegistryProvider>;
 }
 
 /**
@@ -2652,26 +2671,156 @@ function ProjectModeList({
     </>
   );
 
+  const revealRowRegistry = useSidebarRevealRowRegistry();
+  const revealRequest = useSidebarRevealStore((state) => state.request);
+  const clearRevealRequest = useSidebarRevealStore((state) => state.clearRequest);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollContentRef = useRef<View | null>(null);
+  const scrollViewportHeightRef = useRef(0);
+  const handleScrollLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+    },
+    [],
+  );
+
+  // If the reveal target sits behind a "Show more" limit in the pinned section or a project,
+  // expand that group so the row mounts and can be scrolled into view.
+  useEffect(() => {
+    if (!revealRequest) {
+      return;
+    }
+    const { workspaceKey } = revealRequest;
+    const isInPinned = pinnedChats.some((item) => item.workspaceKey === workspaceKey);
+    if (isInPinned && !pinnedChatsExpanded) {
+      const visibleInPinned =
+        leadingPinnedChat?.workspaceKey === workspaceKey ||
+        visiblePinnedChats.some((item) => item.workspaceKey === workspaceKey);
+      if (!visibleInPinned) {
+        setPinnedChatsExpanded(true);
+        return;
+      }
+    }
+    if (!isInPinned) {
+      const policy =
+        createWorkspaceVisibilityPolicy<SidebarWorkspacePlacement>(workspaceEntriesByKey);
+      const selection = selectionEnabled ? activeWorkspaceSelection : null;
+      for (const project of unpinnedProjects) {
+        if (!project.workspaces.some((item) => item.workspaceKey === workspaceKey)) {
+          continue;
+        }
+        if (!expandedProjectKeys.has(project.viewKey)) {
+          const { leadingItem, visibleItems } = selectSidebarGroupVisibility({
+            items: project.workspaces,
+            selection,
+            expanded: false,
+            policy,
+          });
+          const isVisible =
+            leadingItem?.workspaceKey === workspaceKey ||
+            visibleItems.some((item) => item.workspaceKey === workspaceKey);
+          if (!isVisible) {
+            setExpandedProjectKeys((current) => {
+              const next = new Set(current);
+              next.add(project.viewKey);
+              return next;
+            });
+            return;
+          }
+        }
+        break;
+      }
+    }
+  }, [
+    activeWorkspaceSelection,
+    expandedProjectKeys,
+    leadingPinnedChat,
+    pinnedChats,
+    pinnedChatsExpanded,
+    revealRequest,
+    selectionEnabled,
+    unpinnedProjects,
+    visiblePinnedChats,
+    workspaceEntriesByKey,
+  ]);
+
+  // Once the revealed workspace row is mounted (after section expansion / layout), scroll to it.
+  useEffect(() => {
+    if (!revealRequest || !revealRowRegistry) {
+      return;
+    }
+    let cancelled = false;
+    let attempts = 0;
+    let frameId: number | null = null;
+    const MAX_ATTEMPTS = 24;
+
+    const tryScroll = () => {
+      if (cancelled) return;
+      const rowNode = revealRowRegistry.getRowNode(revealRequest.workspaceKey);
+      if (
+        rowNode &&
+        scrollSidebarToRowNode({
+          rowNode,
+          scrollViewRef,
+          scrollContentRef,
+          viewportHeight: scrollViewportHeightRef.current,
+        })
+      ) {
+        clearRevealRequest(revealRequest.requestId);
+        return;
+      }
+      attempts += 1;
+      if (attempts < MAX_ATTEMPTS) {
+        frameId = requestAnimationFrame(tryScroll);
+      } else {
+        clearRevealRequest(revealRequest.requestId);
+      }
+    };
+
+    frameId = requestAnimationFrame(tryScroll);
+    return () => {
+      cancelled = true;
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [
+    clearRevealRequest,
+    collapsedProjectKeys,
+    expandedProjectKeys,
+    pinnedChatsExpanded,
+    pinnedCollapsed,
+    projects,
+    revealRequest,
+    revealRowRegistry,
+  ]);
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={handleScrollLayout}>
       {platformIsNative ? (
         <NestableScrollContainer
+          ref={scrollViewRef as unknown as ComponentProps<typeof NestableScrollContainer>["ref"]}
           {...nativeScrollGestureProps}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           testID="sidebar-project-workspace-list-scroll"
         >
-          {content}
+          <View ref={scrollContentRef} collapsable={false}>
+            {content}
+          </View>
         </NestableScrollContainer>
       ) : (
         <ScrollView
+          ref={scrollViewRef}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           testID="sidebar-project-workspace-list-scroll"
         >
-          {content}
+          <View ref={scrollContentRef} collapsable={false}>
+            {content}
+          </View>
         </ScrollView>
       )}
     </View>
