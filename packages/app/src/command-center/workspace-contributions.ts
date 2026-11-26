@@ -56,6 +56,7 @@ export interface WorkspaceCommandCenterLabels {
   copyBranchName: string;
   pin: string;
   unpin: string;
+  revealInSidebar?: string;
   showSetup: string;
   labelsGroup: string;
 }
@@ -85,6 +86,7 @@ export interface WorkspaceCommandCenterIcons {
   copyBranchName?: CommandCenterIcon;
   pin?: CommandCenterIcon;
   unpin?: CommandCenterIcon;
+  revealInSidebar?: CommandCenterIcon;
   showSetup?: CommandCenterIcon;
   toggleFocusMode?: CommandCenterIcon;
   label?: CommandCenterIcon;
@@ -137,6 +139,7 @@ export interface WorkspaceCommandCenterSource {
   archiveWorkspace: (() => void) | null;
   copyPath(): void;
   copyBranchName(): void;
+  revealInSidebar?: () => void;
   toggleLabel(name: string, assigned: boolean): void | Promise<void>;
 }
 
@@ -617,6 +620,21 @@ export function buildWorkspaceCommandCenterContributions(
         icon: source.isPinned ? source.icons.unpin : source.icons.pin,
         shortcutKeys: source.shortcuts.pinWorkspace,
         action: { id: "workspace.pin", scope: "sidebar" },
+        visibility: "always",
+      }),
+    );
+  }
+
+  if (source.revealInSidebar && source.labels.revealInSidebar) {
+    contributions.push(
+      buildWorkspaceCallback({
+        source,
+        id: "workspace:reveal-in-sidebar",
+        rank: 20.5,
+        title: source.labels.revealInSidebar,
+        keywords: ["reveal", "locate", "find", "sidebar", "scroll", "workspace", "highlight"],
+        icon: source.icons.revealInSidebar,
+        run: source.revealInSidebar,
         visibility: "always",
       }),
     );

@@ -14,6 +14,7 @@ import {
   GitPullRequest,
   Globe,
   ListChecks,
+  LocateFixed,
   Move,
   PanelRight,
   Pencil,
@@ -30,6 +31,7 @@ import { supportsDesktopPaneSplits, useIsCompactFormFactor } from "@/constants/l
 import { GIT_ACTION_ICONS } from "@/git/action-icons";
 import { useGitActionRunner, useGitActions } from "@/git/use-actions";
 import { useKeyboardShortcutOverrides } from "@/hooks/use-keyboard-shortcut-overrides";
+import { useRevealWorkspaceInSidebar } from "@/hooks/use-reveal-workspace-in-sidebar";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
 import { useToast } from "@/contexts/toast-context";
 import { type ShortcutOverrides } from "@/keyboard/keyboard-shortcuts";
@@ -87,6 +89,7 @@ const WORKSPACE_COMMAND_CENTER_ICONS = {
   copyBranchName: getCommandCenterIcon(GitBranch),
   pin: getCommandCenterIcon(Pin),
   unpin: getCommandCenterIcon(PinOff),
+  revealInSidebar: getCommandCenterIcon(LocateFixed),
   showSetup: getCommandCenterIcon(ListChecks),
   toggleFocusMode: getCommandCenterIcon(Focus),
 };
@@ -162,6 +165,10 @@ function useWorkspaceLabelCatalog(
   return { labelCatalog, toggleLabel };
 }
 
+function resolveRevealTargetId(fields: { id: string } | null, workspaceId: string | null) {
+  return fields ? fields.id : workspaceId;
+}
+
 export function useWorkspaceCommandCenterActions(): void {
   const keyboardActionDispatcher = useKeyboardActionDispatcher();
   const { t } = useTranslation();
@@ -230,6 +237,10 @@ export function useWorkspaceCommandCenterActions(): void {
   }, [clipboard, fields]);
 
   const { labelCatalog, toggleLabel } = useWorkspaceLabelCatalog(serverId, fields);
+  const revealInSidebar = useRevealWorkspaceInSidebar(
+    serverId,
+    resolveRevealTargetId(fields, workspaceId),
+  );
 
   const actions = useMemo(
     () =>
@@ -276,6 +287,7 @@ export function useWorkspaceCommandCenterActions(): void {
           copyBranchName: t("workspace.header.actions.copyBranchName"),
           pin: t("sidebar.workspace.actions.pin"),
           unpin: t("sidebar.workspace.actions.unpin"),
+          revealInSidebar: t("workspace.header.actions.revealInSidebar"),
           showSetup: t("workspace.header.actions.showSetup"),
           labelsGroup: t("workspaceLabels.title"),
         },
@@ -306,6 +318,7 @@ export function useWorkspaceCommandCenterActions(): void {
         archiveWorkspace,
         copyPath,
         copyBranchName,
+        revealInSidebar,
         toggleLabel,
       }),
     [
@@ -325,6 +338,7 @@ export function useWorkspaceCommandCenterActions(): void {
       keyboardActionDispatcher,
       labelCatalog,
       overrides,
+      revealInSidebar,
       runGitAction,
       t,
       toggleLabel,

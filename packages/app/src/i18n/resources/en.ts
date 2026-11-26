@@ -787,6 +787,9 @@ export const en = {
         copyPath: "Copy workspace path",
         copyBranchName: "Copy branch name",
         showSetup: "Show setup",
+        pinWorkspace: "Pin workspace",
+        unpinWorkspace: "Unpin workspace",
+        revealInSidebar: "Reveal in sidebar",
       },
       toasts: {
         workspacePathUnavailable: "Workspace path is not available yet",

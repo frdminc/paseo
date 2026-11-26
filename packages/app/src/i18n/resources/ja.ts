@@ -794,6 +794,9 @@ export const ja: TranslationResources = {
         copyPath: "ワークスペースパスをコピー",
         copyBranchName: "ブランチ名をコピー",
         showSetup: "セットアップを表示",
+        pinWorkspace: "ワークスペースをピン留め",
+        unpinWorkspace: "ピン留めを解除",
+        revealInSidebar: "サイドバーで表示",
       },
       toasts: {
         workspacePathUnavailable: "ワークスペースパスはまだ利用できません",

@@ -797,6 +797,9 @@ export const es: TranslationResources = {
         copyPath: "Copiar ruta del espacio de trabajo",
         copyBranchName: "Copiar nombre de sucursal",
         showSetup: "Mostrar configuración",
+        pinWorkspace: "Fijar espacio de trabajo",
+        unpinWorkspace: "Desfijar espacio de trabajo",
+        revealInSidebar: "Mostrar en la barra lateral",
       },
       toasts: {
         workspacePathUnavailable: "La rutaWorkspaceaún no está disponible",

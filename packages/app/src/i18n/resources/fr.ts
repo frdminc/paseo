@@ -798,6 +798,9 @@ export const fr: TranslationResources = {
         copyPath: "Copier le chemin de l’espace de travail",
         copyBranchName: "Copier le nom de la branche",
         showSetup: "Afficher la configuration",
+        pinWorkspace: "Épingler l’espace de travail",
+        unpinWorkspace: "Désépingler l’espace de travail",
+        revealInSidebar: "Afficher dans la barre latérale",
       },
       toasts: {
         workspacePathUnavailable: "Le chemin de l’espace de travail n’est pas encore disponible",
