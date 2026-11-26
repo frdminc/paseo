@@ -9,6 +9,9 @@ import {
   Ellipsis,
   Globe,
   Import as ImportIcon,
+  LocateFixed,
+  Pin,
+  PinOff,
   Settings,
 } from "lucide-react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
@@ -47,6 +50,9 @@ const ThemedArchive = withUnistyles(Archive);
 const ThemedCopy = withUnistyles(Copy);
 const ThemedGlobe = withUnistyles(Globe);
 const ThemedImport = withUnistyles(ImportIcon);
+const ThemedLocateFixed = withUnistyles(LocateFixed);
+const ThemedPin = withUnistyles(Pin);
+const ThemedPinOff = withUnistyles(PinOff);
 const ThemedSettings = withUnistyles(Settings);
 
 const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMuted });
@@ -54,6 +60,9 @@ const mutedColorMapping = (theme: Theme) => ({ color: theme.colors.foregroundMut
 const MENU_NEW_BROWSER_ICON = <ThemedGlobe size={16} uniProps={mutedColorMapping} />;
 const MENU_IMPORT_ICON = <ThemedImport size={16} uniProps={mutedColorMapping} />;
 const MENU_COPY_ICON = <ThemedCopy size={16} uniProps={mutedColorMapping} />;
+const MENU_LOCATE_ICON = <ThemedLocateFixed size={16} uniProps={mutedColorMapping} />;
+const MENU_PIN_ICON = <ThemedPin size={16} uniProps={mutedColorMapping} />;
+const MENU_UNPIN_ICON = <ThemedPinOff size={16} uniProps={mutedColorMapping} />;
 const MENU_ARCHIVE_ICON = <ThemedArchive size={16} uniProps={mutedColorMapping} />;
 const MENU_SETTINGS_ICON = <ThemedSettings size={16} uniProps={mutedColorMapping} />;
 function WorkspaceHeaderMenuTriggerIcon() {
@@ -91,6 +100,10 @@ export interface WorkspaceHeaderWorkspaceActions {
   showWorkspaceSetup: boolean;
   importAgentDisabled: boolean;
   copyPathDisabled: boolean;
+  canPin?: boolean;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
+  onRevealInSidebar?: () => void;
   onOpenImportSheet: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
@@ -102,6 +115,10 @@ function WorkspaceHeaderWorkspaceActionItems({
   showWorkspaceSetup,
   importAgentDisabled,
   copyPathDisabled,
+  canPin = false,
+  isPinned = false,
+  onTogglePin,
+  onRevealInSidebar,
   onOpenImportSheet,
   onCopyWorkspacePath,
   onCopyBranchName,
@@ -110,6 +127,27 @@ function WorkspaceHeaderWorkspaceActionItems({
   const { t } = useTranslation();
   return (
     <>
+      {canPin && onTogglePin ? (
+        <DropdownMenuItem
+          testID="workspace-header-toggle-pin"
+          leading={isPinned ? MENU_UNPIN_ICON : MENU_PIN_ICON}
+          onSelect={onTogglePin}
+        >
+          {isPinned
+            ? t("workspace.header.actions.unpinWorkspace")
+            : t("workspace.header.actions.pinWorkspace")}
+        </DropdownMenuItem>
+      ) : null}
+      {onRevealInSidebar ? (
+        <DropdownMenuItem
+          testID="workspace-header-reveal-in-sidebar"
+          leading={MENU_LOCATE_ICON}
+          onSelect={onRevealInSidebar}
+        >
+          {t("workspace.header.actions.revealInSidebar")}
+        </DropdownMenuItem>
+      ) : null}
+      {(canPin && onTogglePin) || onRevealInSidebar ? <DropdownMenuSeparator /> : null}
       <DropdownMenuItem
         testID="workspace-header-copy-path"
         leading={MENU_COPY_ICON}

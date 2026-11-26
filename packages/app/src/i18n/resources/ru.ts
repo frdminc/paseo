@@ -811,6 +811,9 @@ export const ru: TranslationResources = {
         copyPath: "Скопировать путь к рабочему пространству",
         copyBranchName: "Скопировать название ветки",
         showSetup: "Показать настройку рабочего пространства",
+        pinWorkspace: "Закрепить рабочее пространство",
+        unpinWorkspace: "Открепить рабочее пространство",
+        revealInSidebar: "Показать на боковой панели",
       },
       toasts: {
         workspacePathUnavailable: "Путь к рабочему пространству пока недоступен.",

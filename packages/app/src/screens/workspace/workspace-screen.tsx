@@ -218,6 +218,10 @@ import {
   WorkspaceHeaderMenuDesktop,
   WorkspaceHeaderMenuMobile,
 } from "@/screens/workspace/workspace-header-menu";
+import {
+  useWorkspaceHeaderPinAndReveal,
+  WorkspaceHeaderQuickActions,
+} from "@/screens/workspace/workspace-header-quick-actions";
 import { PluginHeaderButtons } from "@/plugins";
 import {
   createWorkspaceFileTabTarget,
@@ -484,6 +488,11 @@ interface WorkspaceHeaderTitleBarProps {
   showWorkspaceSetup: boolean;
   importAgentDisabled: boolean;
   copyPathDisabled: boolean;
+  canPin: boolean;
+  isPinned: boolean;
+  onTogglePin: () => void;
+  canRevealInSidebar: boolean;
+  onRevealInSidebar: () => void;
   onOpenImportSheet: () => void;
   onCopyWorkspacePath: () => void;
   onCopyBranchName: () => void;
@@ -500,6 +509,11 @@ function WorkspaceHeaderTitleBar({
   showWorkspaceSetup,
   importAgentDisabled,
   copyPathDisabled,
+  canPin,
+  isPinned,
+  onTogglePin,
+  canRevealInSidebar,
+  onRevealInSidebar,
   onOpenImportSheet,
   onCopyWorkspacePath,
   onCopyBranchName,
@@ -524,11 +538,22 @@ function WorkspaceHeaderTitleBar({
       )}
       {actionsInBar ? null : (
         <View style={styles.compactHeaderMenuCluster}>
+          <WorkspaceHeaderQuickActions
+            canPin={canPin}
+            isPinned={isPinned}
+            onTogglePin={onTogglePin}
+            canRevealInSidebar={canRevealInSidebar}
+            onRevealInSidebar={onRevealInSidebar}
+          />
           <WorkspaceHeaderMenuDesktop
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
             importAgentDisabled={importAgentDisabled}
             copyPathDisabled={copyPathDisabled}
+            canPin={canPin}
+            isPinned={isPinned}
+            onTogglePin={onTogglePin}
+            onRevealInSidebar={canRevealInSidebar ? onRevealInSidebar : undefined}
             onOpenImportSheet={onOpenImportSheet}
             onCopyWorkspacePath={onCopyWorkspacePath}
             onCopyBranchName={onCopyBranchName}
@@ -3325,6 +3350,11 @@ function WorkspaceScreenContent({
       `${WORKSPACE_FLOATING_PANEL_PORTAL_HOST_PREFIX}:${normalizedServerId}:${normalizedWorkspaceId}`,
     [normalizedServerId, normalizedWorkspaceId],
   );
+  const headerPinAndReveal = useWorkspaceHeaderPinAndReveal({
+    serverId: normalizedServerId,
+    workspaceId: normalizedWorkspaceId,
+    descriptorId: workspaceDescriptor?.id,
+  });
   const renderWorkspaceScreenHeader = useCallback(
     () =>
       showScreenHeader ? (
@@ -3342,6 +3372,11 @@ function WorkspaceScreenContent({
                 showWorkspaceSetup={showWorkspaceSetup}
                 importAgentDisabled={!canOpenImportSheet}
                 copyPathDisabled={!workspaceDirectory}
+                canPin={headerPinAndReveal.canPin}
+                isPinned={headerPinAndReveal.isPinned}
+                onTogglePin={headerPinAndReveal.onTogglePin}
+                canRevealInSidebar={headerPinAndReveal.canRevealInSidebar}
+                onRevealInSidebar={headerPinAndReveal.onRevealInSidebar}
                 onOpenImportSheet={openImportSheet}
                 onCopyWorkspacePath={handleCopyWorkspacePath}
                 onCopyBranchName={handleCopyBranchName}
@@ -3358,6 +3393,11 @@ function WorkspaceScreenContent({
       handleCopyBranchName,
       handleCopyWorkspacePath,
       handleOpenSetupTab,
+      headerPinAndReveal.canPin,
+      headerPinAndReveal.canRevealInSidebar,
+      headerPinAndReveal.isPinned,
+      headerPinAndReveal.onRevealInSidebar,
+      headerPinAndReveal.onTogglePin,
       headerRight,
       isWorkspaceHeaderLoading,
       normalizedServerId,
@@ -3467,6 +3507,10 @@ function WorkspaceScreenContent({
             createTerminalDisabled={createTerminalDisabled}
             importAgentDisabled={!canOpenImportSheet}
             copyPathDisabled={!workspaceDirectory}
+            canPin={headerPinAndReveal.canPin}
+            isPinned={headerPinAndReveal.isPinned}
+            onTogglePin={headerPinAndReveal.onTogglePin}
+            onRevealInSidebar={headerPinAndReveal.menuRevealInSidebar}
             onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
             onCreateBrowser={handleCreateBrowserTab}
             onOpenImportSheet={openImportSheet}
@@ -3492,6 +3536,10 @@ function WorkspaceScreenContent({
       handleCreateBrowserTab,
       handleCreateTerminalWithProfile,
       handleOpenSetupTab,
+      headerPinAndReveal.canPin,
+      headerPinAndReveal.isPinned,
+      headerPinAndReveal.menuRevealInSidebar,
+      headerPinAndReveal.onTogglePin,
       isMobile,
       isRouteFocused,
       isWorkspaceHeaderLoading,

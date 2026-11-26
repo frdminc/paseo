@@ -800,6 +800,9 @@ export const ko: TranslationResources = {
         copyPath: "워크스페이스 경로 복사",
         copyBranchName: "브랜치 이름 복사",
         showSetup: "설정 표시",
+        pinWorkspace: "워크스페이스 고정",
+        unpinWorkspace: "워크스페이스 고정 해제",
+        revealInSidebar: "사이드바에서 보기",
       },
       toasts: {
         workspacePathUnavailable: "워크스페이스 경로를 아직 사용할 수 없습니다",

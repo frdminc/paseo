@@ -800,6 +800,9 @@ export const ar: TranslationResources = {
         copyPath: "نسخ مسار مساحة العمل",
         copyBranchName: "انسخ اسم الفرع",
         showSetup: "إظهار الإعداد",
+        pinWorkspace: "تثبيت مساحة العمل",
+        unpinWorkspace: "إلغاء تثبيت مساحة العمل",
+        revealInSidebar: "إظهار في الشريط الجانبي",
       },
       toasts: {
         workspacePathUnavailable: "مسار Workspace غير متاح بعد",
