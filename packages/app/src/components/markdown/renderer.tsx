@@ -8,8 +8,10 @@ import {
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { matchCommandLink, useAgentCommandHints, type CommandHints } from "@/agent-commands";
 import { useForgeShorthand } from "@/git/forge-shorthand";
+import { parsePaseoDeepLink } from "@getpaseo/protocol/deep-link";
 import { pluginOverviewUrl } from "@getpaseo/protocol/plugin-overview";
 import { openExternalUrl } from "@/utils/open-external-url";
+import { openPaseoDeepLink } from "@/utils/paseo-deep-link";
 import { AttachmentLightbox, type ImageLightboxSource } from "@/components/attachment-lightbox";
 import type { Theme } from "@/styles/theme";
 import { isWeb } from "@/constants/platform";
@@ -61,6 +63,8 @@ export interface MarkdownRendererProps extends MarkdownImageContext {
    * a paragraph join as they do on its forge.
    */
   external?: boolean;
+  /** Allow `paseo://h/...` tab/workspace deep links on trusted in-app surfaces. */
+  allowPaseoLinks?: boolean;
 }
 
 /** All Markdown surfaces share the same engine and source adaptation. */
@@ -96,6 +100,7 @@ const MarkdownPart = memo(function MarkdownPart({
   onLinkPress,
   agentCommands: _agentCommands,
   external = false,
+  allowPaseoLinks = false,
   commandHints = null,
   ...imageContext
 }: MarkdownRendererProps & { commandHints?: CommandHints | null }) {
@@ -103,6 +108,7 @@ const MarkdownPart = memo(function MarkdownPart({
   const actions = useAssistantFileLinkActions();
   const workspaceForgeShorthand = useForgeShorthand();
   const forgeShorthand = external ? null : workspaceForgeShorthand;
+  const canOpenPaseoLinks = !external && allowPaseoLinks;
   const client =
     imageContext.client ??
     (environment.client?.readFile
@@ -120,6 +126,7 @@ const MarkdownPart = memo(function MarkdownPart({
       commandNames: commandHints?.names,
       forgeReferencePattern: forgeShorthand?.pattern,
       external,
+      allowPaseoLinks: canOpenPaseoLinks,
     },
   );
   const [image, setImage] = useState<ImageLightboxSource | null>(null);
@@ -139,6 +146,13 @@ const MarkdownPart = memo(function MarkdownPart({
     if (forgeUrl) {
       void openExternalUrl(forgeUrl);
       return;
+    }
+    if (canOpenPaseoLinks) {
+      const deepLink = parsePaseoDeepLink(url);
+      if (deepLink) {
+        openPaseoDeepLink(deepLink, { toast: environment.toast });
+        return;
+      }
     }
     const source = linkSource(url, sourceType);
     if (onLinkPress && !actions.canResolveFile(source)) onLinkPress(url);

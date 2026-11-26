@@ -10,6 +10,7 @@ export interface WorkspaceTabMenuLabels {
   copyAgentId: string;
   copyTerminalId: string;
   copyFilePath: string;
+  copyLink?: string;
   rename: string;
   closeAbove: string;
   closeBelow: string;
@@ -26,6 +27,7 @@ export const DEFAULT_WORKSPACE_TAB_MENU_LABELS: WorkspaceTabMenuLabels = {
   copyAgentId: i18n.t("workspace.tabs.menu.copyAgentId"),
   copyTerminalId: i18n.t("workspace.tabs.menu.copyTerminalId"),
   copyFilePath: i18n.t("workspace.tabs.menu.copyFilePath"),
+  copyLink: i18n.t("workspace.tabs.menu.copyLink"),
   rename: i18n.t("workspace.tabs.menu.rename"),
   closeAbove: i18n.t("workspace.tabs.menu.closeAbove"),
   closeBelow: i18n.t("workspace.tabs.menu.closeBelow"),
@@ -44,6 +46,7 @@ export type WorkspaceTabMenuEntry =
       label: string;
       icon?:
         | "copy"
+        | "link"
         | "rotate-cw"
         | "arrow-left-to-line"
         | "arrow-right-to-line"
@@ -77,6 +80,8 @@ interface BuildWorkspaceTabMenuEntriesInput {
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyTabLink?: (tab: WorkspaceTabDescriptor) => Promise<void> | void;
+  canCopyTabLink?: (tab: WorkspaceTabDescriptor) => boolean;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -94,6 +99,8 @@ interface BuildWorkspaceDesktopTabActionsInput {
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyTabLink?: (tab: WorkspaceTabDescriptor) => Promise<void> | void;
+  canCopyTabLink?: (tab: WorkspaceTabDescriptor) => boolean;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTab: (tabId: string) => Promise<void> | void;
@@ -181,6 +188,8 @@ export function buildWorkspaceTabMenuEntries(
     onCopyAgentId,
     onCopyTerminalId,
     onCopyFilePath,
+    onCopyTabLink,
+    canCopyTabLink,
     onReloadAgent,
     onRenameTab,
     onCloseTab,
@@ -249,6 +258,19 @@ export function buildWorkspaceTabMenuEntries(
     entries.push({ kind: "file-panel-open-with", key: "file-panel-open-with" });
   }
 
+  if (onCopyTabLink && (canCopyTabLink ? canCopyTabLink(tab) : true)) {
+    entries.push({
+      kind: "item",
+      key: "copy-link",
+      label: labels.copyLink ?? DEFAULT_WORKSPACE_TAB_MENU_LABELS.copyLink ?? "Copy link",
+      icon: "link",
+      testID: `${menuTestIDBase}-copy-link`,
+      onSelect: () => {
+        void onCopyTabLink(tab);
+      },
+    });
+  }
+
   if (tab.target.kind === "agent" || tab.target.kind === "terminal") {
     entries.push({
       kind: "item",
@@ -263,6 +285,11 @@ export function buildWorkspaceTabMenuEntries(
     entries.push({
       kind: "separator",
       key: "rename-separator",
+    });
+  } else if (entries.length > 0 && tab.target.kind !== "file") {
+    entries.push({
+      kind: "separator",
+      key: "copy-separator",
     });
   }
 
@@ -343,6 +370,8 @@ export function buildWorkspaceDesktopTabActions(
       onCopyAgentId: input.onCopyAgentId,
       onCopyTerminalId: input.onCopyTerminalId,
       onCopyFilePath: input.onCopyFilePath,
+      onCopyTabLink: input.onCopyTabLink,
+      canCopyTabLink: input.canCopyTabLink,
       onReloadAgent: input.onReloadAgent,
       onRenameTab: input.onRenameTab,
       onCloseTab: input.onCloseTab,

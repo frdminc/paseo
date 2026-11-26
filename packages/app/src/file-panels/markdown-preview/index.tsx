@@ -57,6 +57,7 @@ export function FileMarkdownPreview({
         >
           <MarkdownRenderer
             text={document.body}
+            allowPaseoLinks
             filePath={filePath}
             workspaceRoot={workspaceRoot}
             client={client}

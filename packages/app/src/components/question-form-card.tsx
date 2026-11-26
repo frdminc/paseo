@@ -148,7 +148,7 @@ function QuestionOptionRow({
           <MarkdownRenderer text={option.label} compact muted={!isSelected} selectable={false} />
           {option.description ? (
             <View testID="question-form-option-description">
-              <MarkdownRenderer text={option.description} compact muted />
+              <MarkdownRenderer text={option.description} compact muted allowPaseoLinks />
             </View>
           ) : null}
           {option.preview ? (
@@ -575,7 +575,11 @@ export function QuestionFormCard({
       />
       <View style={styles.questionHeader}>
         <View testID="question-form-current-question" style={styles.questionText}>
-          <MarkdownRenderer text={questions[resolvedActiveQuestionIndex].question} compact />
+          <MarkdownRenderer
+            text={questions[resolvedActiveQuestionIndex].question}
+            compact
+            allowPaseoLinks
+          />
         </View>
       </View>
 

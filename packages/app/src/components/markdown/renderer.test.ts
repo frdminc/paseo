@@ -1157,4 +1157,57 @@ describe("external Markdown", () => {
       "Demo ![Shot](https://x/a.png)",
     );
   });
+
+  it("drops paseo:// links on external Markdown surfaces", () => {
+    const { linkRecognition, render } = external(
+      "See [agent](paseo://h/srv_1/agent/agt_1) and paseo://h/srv_1/workspace/wks_1/terminal/trm_1",
+    );
+    expect(render()).toBe("See agent and paseo://h/srv_1/workspace/wks_1/terminal/trm_1");
+    expect("paseo://h/srv_1/workspace/wks_1/terminal/trm_1".match(linkRecognition.text)).toBeNull();
+  });
+});
+
+describe("Paseo deep links in Markdown", () => {
+  it("recognizes bare and inline-code paseo:// tab links only when allowPaseoLinks is enabled", () => {
+    const terminalLink = "paseo://h/srv_1/workspace/wks_1/terminal/trm_42";
+    const fileLink = "paseo://h/srv_1/workspace/wks_1/file?path=docs%2Fspec%20%28v2%29.md&line=12";
+    const source = `Open ${terminalLink}. Also \`${fileLink}\` and (${fileLink}).`;
+
+    const disabled = prepareMarkdownSource(source);
+    expect(source.match(disabled.linkRecognition.text)).not.toContain(terminalLink);
+    expect(disabled.linkRecognition.inlineCode.test(fileLink)).toBe(false);
+
+    const enabled = prepareMarkdownSource(source, undefined, { allowPaseoLinks: true });
+    expect(source.match(enabled.linkRecognition.text)).toEqual([terminalLink, fileLink, fileLink]);
+    expect(enabled.linkRecognition.inlineCode.test(fileLink)).toBe(true);
+    expect(
+      enabled.linkRecognition.inlineCode.test("paseo://h/srv_1/workspace/wks_1/file?path=../bad"),
+    ).toBe(false);
+    // Native regex parser compatibility (iOS ICU / Android java.util.regex).
+    expect(() => toNativeLinkRecognition(enabled.linkRecognition)).not.toThrow();
+  });
+
+  it("strips authored paseo:// link destinations when allowPaseoLinks is false", () => {
+    const disabled = prepareMarkdownSource(
+      "Click [terminal](paseo://h/srv_1/workspace/wks_1/terminal/trm_1) or [docs](https://example.com)",
+    );
+    expect(disabled.render()).toBe("Click terminal or [docs](https://example.com)");
+
+    const enabled = prepareMarkdownSource(
+      "Click [terminal](paseo://h/srv_1/workspace/wks_1/terminal/trm_1)",
+      undefined,
+      { allowPaseoLinks: true },
+    );
+    expect(enabled.render()).toBe(
+      "Click [terminal](paseo://h/srv_1/workspace/wks_1/terminal/trm_1)",
+    );
+  });
+
+  it("stops bare paseo:// links before trailing ASCII and CJK sentence punctuation", () => {
+    const agentLink = "paseo://h/srv_1/agent/agt_123";
+    const enabled = prepareMarkdownSource(`请查看${agentLink}。`, undefined, {
+      allowPaseoLinks: true,
+    });
+    expect(`请查看${agentLink}。`.match(enabled.linkRecognition.text)).toEqual([agentLink]);
+  });
 });

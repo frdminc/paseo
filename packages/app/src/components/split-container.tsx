@@ -87,6 +87,8 @@ interface SplitContainerProps {
   onCopyAgentId: (agentId: string) => Promise<void> | void;
   onCopyTerminalId: (terminalId: string) => Promise<void> | void;
   onCopyFilePath: (path: string) => Promise<void> | void;
+  onCopyTabLink?: (tab: WorkspaceTabDescriptor) => Promise<void> | void;
+  canCopyTabLink?: (tab: WorkspaceTabDescriptor) => boolean;
   onReloadAgent: (agentId: string) => Promise<void> | void;
   onRenameTab: (tab: WorkspaceTabDescriptor) => void;
   onCloseTabsToLeft: (tabId: string, paneTabs: WorkspaceTabDescriptor[]) => Promise<void> | void;
@@ -176,6 +178,8 @@ export function SplitContainer({
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
+  onCopyTabLink,
+  canCopyTabLink,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -290,6 +294,8 @@ export function SplitContainer({
                 onCopyAgentId={onCopyAgentId}
                 onCopyTerminalId={onCopyTerminalId}
                 onCopyFilePath={onCopyFilePath}
+                onCopyTabLink={onCopyTabLink}
+                canCopyTabLink={canCopyTabLink}
                 onReloadAgent={onReloadAgent}
                 onRenameTab={onRenameTab}
                 onCloseTabsToLeft={onCloseTabsToLeft}
@@ -428,6 +434,8 @@ function SplitNodeView({
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
+  onCopyTabLink,
+  canCopyTabLink,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -523,6 +531,8 @@ function SplitNodeView({
             onCopyAgentId={onCopyAgentId}
             onCopyTerminalId={onCopyTerminalId}
             onCopyFilePath={onCopyFilePath}
+            onCopyTabLink={onCopyTabLink}
+            canCopyTabLink={canCopyTabLink}
             onReloadAgent={onReloadAgent}
             onRenameTab={onRenameTab}
             onCloseTabsToLeft={onCloseTabsToLeft}
@@ -578,6 +588,8 @@ function SplitNodeView({
               onCopyAgentId={onCopyAgentId}
               onCopyTerminalId={onCopyTerminalId}
               onCopyFilePath={onCopyFilePath}
+              onCopyTabLink={onCopyTabLink}
+              canCopyTabLink={canCopyTabLink}
               onReloadAgent={onReloadAgent}
               onRenameTab={onRenameTab}
               onCloseTabsToLeft={onCloseTabsToLeft}
@@ -652,6 +664,8 @@ const SplitPaneView = memo(function SplitPaneView({
   onCopyAgentId,
   onCopyTerminalId,
   onCopyFilePath,
+  onCopyTabLink,
+  canCopyTabLink,
   onReloadAgent,
   onRenameTab,
   onCloseTabsToLeft,
@@ -850,6 +864,8 @@ const SplitPaneView = memo(function SplitPaneView({
                 onCopyAgentId={onCopyAgentId}
                 onCopyTerminalId={onCopyTerminalId}
                 onCopyFilePath={onCopyFilePath}
+                onCopyTabLink={onCopyTabLink}
+                canCopyTabLink={canCopyTabLink}
                 onReloadAgent={onReloadAgent}
                 onRenameTab={onRenameTab}
                 onCloseTabsToLeft={handleCloseTabsToLeft}

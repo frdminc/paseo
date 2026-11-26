@@ -80,7 +80,7 @@ function PlanCardContent({
       {expanded ? (
         <View style={styles.body}>
           {description ? <Text style={styles.description}>{description}</Text> : null}
-          <MarkdownRenderer text={text} />
+          <MarkdownRenderer text={text} allowPaseoLinks />
         </View>
       ) : null}
       {footer ? <View style={styles.footer}>{footer}</View> : null}
