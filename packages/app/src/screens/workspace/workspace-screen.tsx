@@ -538,13 +538,6 @@ function WorkspaceHeaderTitleBar({
       )}
       {actionsInBar ? null : (
         <View style={styles.compactHeaderMenuCluster}>
-          <WorkspaceHeaderQuickActions
-            canPin={canPin}
-            isPinned={isPinned}
-            onTogglePin={onTogglePin}
-            canRevealInSidebar={canRevealInSidebar}
-            onRevealInSidebar={onRevealInSidebar}
-          />
           <WorkspaceHeaderMenuDesktop
             currentBranchName={currentBranchName}
             showWorkspaceSetup={showWorkspaceSetup}
@@ -558,6 +551,13 @@ function WorkspaceHeaderTitleBar({
             onCopyWorkspacePath={onCopyWorkspacePath}
             onCopyBranchName={onCopyBranchName}
             onOpenSetupTab={onOpenSetupTab}
+          />
+          <WorkspaceHeaderQuickActions
+            canPin={canPin}
+            isPinned={isPinned}
+            onTogglePin={onTogglePin}
+            canRevealInSidebar={canRevealInSidebar}
+            onRevealInSidebar={onRevealInSidebar}
           />
         </View>
       )}
