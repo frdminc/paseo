@@ -2696,7 +2696,6 @@ function ProjectModeList({
   const revealRequest = useSidebarRevealStore((state) => state.request);
   const clearRevealRequest = useSidebarRevealStore((state) => state.clearRequest);
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const scrollContentRef = useRef<View | null>(null);
   const scrollViewportHeightRef = useRef(0);
   const handleScrollLayout = useCallback(
     (event: { nativeEvent: { layout: { height: number } } }) => {
@@ -2783,7 +2782,6 @@ function ProjectModeList({
         scrollSidebarToRowNode({
           rowNode,
           scrollViewRef,
-          scrollContentRef,
           viewportHeight: scrollViewportHeightRef.current,
         })
       ) {
@@ -2828,9 +2826,7 @@ function ProjectModeList({
           showsVerticalScrollIndicator={false}
           testID="sidebar-project-workspace-list-scroll"
         >
-          <View ref={scrollContentRef} collapsable={false}>
-            {content}
-          </View>
+          {content}
         </NestableScrollContainer>
       ) : (
         <ScrollView
@@ -2841,9 +2837,7 @@ function ProjectModeList({
           showsVerticalScrollIndicator={false}
           testID="sidebar-project-workspace-list-scroll"
         >
-          <View ref={scrollContentRef} collapsable={false}>
-            {content}
-          </View>
+          {content}
         </ScrollView>
       )}
     </View>

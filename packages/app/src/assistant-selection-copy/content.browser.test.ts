@@ -1271,7 +1271,13 @@ describe("Shift-drag selection controller", () => {
     finish(label);
     expect(write).not.toHaveBeenCalled();
     start(label);
-    label.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    const shiftClick = vi.fn();
+    label.addEventListener("click", shiftClick);
+    label.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, shiftKey: true }));
+    label.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true, detail: 1 }),
+    );
+    expect(shiftClick).toHaveBeenCalledTimes(1);
     expect(write).not.toHaveBeenCalled();
     start(label);
     selectText(label, 0, 2);

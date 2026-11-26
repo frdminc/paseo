@@ -126,6 +126,9 @@ export function installSelectionCopy(feedback: SelectionCopyFeedback): () => voi
 
     const selection = window.getSelection();
     retainHighlight = selection !== null && !selection.isCollapsed;
+    // Preserve plain Shift-clicks (such as Finder-style sidebar range selection) when no drag
+    // occurred and no text highlight was created; still block clicks after a Shift-drag.
+    blockClick = moved || retainHighlight;
     updateMode();
     if (!moved || !selection || selection.rangeCount !== 1 || selection.isCollapsed) return;
     if (!eligibleTarget(event.target)) return;

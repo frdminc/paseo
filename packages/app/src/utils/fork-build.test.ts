@@ -6,8 +6,8 @@ describe("fork build marker", () => {
     expect(formatForkBuild({ name: "djbclark", build: 2 })).toBe("djbclark fork 2");
   });
 
-  it("is build 3", () => {
-    expect(FORK_BUILD.build).toBe(3);
+  it("is build 4", () => {
+    expect(FORK_BUILD.build).toBe(4);
     expect(formatForkBuild(FORK_BUILD)).toBe("djbclark fork 4");
   });
 

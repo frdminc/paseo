@@ -367,7 +367,6 @@ export function SidebarStatusWorkspaceList({
   const revealRequest = useSidebarRevealStore((state) => state.request);
   const clearRevealRequest = useSidebarRevealStore((state) => state.clearRequest);
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const scrollContentRef = useRef<View | null>(null);
   const scrollViewportHeightRef = useRef(0);
   const handleScrollLayout = useCallback(
     (event: { nativeEvent: { layout: { height: number } } }) => {
@@ -446,7 +445,6 @@ export function SidebarStatusWorkspaceList({
         scrollSidebarToRowNode({
           rowNode,
           scrollViewRef,
-          scrollContentRef,
           viewportHeight: scrollViewportHeightRef.current,
         })
       ) {
@@ -490,9 +488,7 @@ export function SidebarStatusWorkspaceList({
           showsVerticalScrollIndicator={false}
           testID="sidebar-status-list-scroll"
         >
-          <View ref={scrollContentRef} collapsable={false}>
-            {content}
-          </View>
+          {content}
         </NestableScrollContainer>
       ) : (
         <ScrollView
@@ -503,9 +499,7 @@ export function SidebarStatusWorkspaceList({
           showsVerticalScrollIndicator={false}
           testID="sidebar-status-list-scroll"
         >
-          <View ref={scrollContentRef} collapsable={false}>
-            {content}
-          </View>
+          {content}
         </ScrollView>
       )}
     </View>

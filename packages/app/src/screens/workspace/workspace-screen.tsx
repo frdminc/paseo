@@ -1063,6 +1063,17 @@ function DesktopCenterColumnChrome({
   );
 }
 
+function resolveWorkspaceDirectoryState(descriptor: ReturnType<typeof useWorkspace>): {
+  workspaceDirectory: string | null;
+  isMissingWorkspaceDirectory: boolean;
+} {
+  const workspaceDirectory = descriptor?.workspaceDirectory || null;
+  return {
+    workspaceDirectory,
+    isMissingWorkspaceDirectory: Boolean(descriptor) && !workspaceDirectory,
+  };
+}
+
 function WorkspaceScreenContent({
   serverId,
   workspaceId,
@@ -1111,8 +1122,8 @@ function WorkspaceScreenContent({
   const supportsProvidersSnapshot = useSessionStore(
     (state) => state.sessions[normalizedServerId]?.serverInfo?.features?.providersSnapshot === true,
   );
-  const workspaceDirectory = workspaceDescriptor?.workspaceDirectory || null;
-  const isMissingWorkspaceDirectory = Boolean(workspaceDescriptor) && !workspaceDirectory;
+  const { workspaceDirectory, isMissingWorkspaceDirectory } =
+    resolveWorkspaceDirectoryState(workspaceDescriptor);
   const [isImportSheetVisible, setIsImportSheetVisible] = useState(false);
   const canOpenImportSheet = [client, isConnected, workspaceDirectory].every(Boolean);
   const openImportSheet = useCallback(() => {

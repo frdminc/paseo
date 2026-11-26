@@ -405,13 +405,7 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
     id: "agent-profiles",
     labelKey: "settings.hostSections.agentProfiles",
     icon: Layers,
-    searchGroups: [
-      {
-        translationPrefixes: ["settings.host.agentProfiles"],
-        // AgentProfilesPage owns its own wide PageLayout and inspector drawer split.
-        resultMode: "sidebar-only",
-      },
-    ],
+    searchGroups: [{ translationPrefixes: ["settings.host.agentProfiles"] }],
   },
   {
     id: "metadata",
@@ -535,11 +529,35 @@ function renderHostSettingsContent(
   }
 }
 
+function AgentProfilesSearchResultCard({ onOpen }: { onOpen: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <SettingsSection title={t("settings.host.agentProfiles.sectionTitle")}>
+      <View style={settingsStyles.card}>
+        <View style={settingsStyles.row}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.host.agentProfiles.emptyState")}
+            </Text>
+          </View>
+          <Button variant="secondary" onPress={onOpen}>
+            {t("settings.plugins.screens.open")}
+          </Button>
+        </View>
+      </View>
+    </SettingsSection>
+  );
+}
+
 function renderHostSearchEntry(
   entry: SettingsSearchIndexEntry & { section: HostSectionSlug },
   serverId: string,
   onHostRemoved: () => void,
+  onOpenAgentProfiles: () => void,
 ): ReactNode {
+  if (entry.section === "agent-profiles") {
+    return <AgentProfilesSearchResultCard onOpen={onOpenAgentProfiles} />;
+  }
   if (entry.id === "agents" || entry.id === "agents.skills") {
     const group: HostAgentsSearchGroup = entry.id === "agents" ? "runtime" : "skills";
     return <HostAgentsSearchPage serverId={serverId} group={group} />;
@@ -1922,6 +1940,11 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
   // The gallery and a plugin's page share one width, so opening a plugin keeps the page edges put.
   const detailWidth = pluginGalleryServerId || pluginPage ? "wide" : "default";
 
+  const handleOpenAgentProfilesFromSearch = useCallback(() => {
+    setSettingsSearchInput("");
+    handleSelectHostSection("agent-profiles");
+  }, [handleSelectHostSection]);
+
   const renderSettingsSearchEntry = useCallback(
     (entry: SettingsSearchIndexEntry): ReactNode => {
       const hostSection = isHostSectionSlug(entry.section) ? entry.section : null;
@@ -1931,6 +1954,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
           { ...entry, section: hostSection },
           activeHostServerId,
           handleHostRemoved,
+          handleOpenAgentProfilesFromSearch,
         );
       }
 
@@ -1977,6 +2001,7 @@ export default function SettingsScreen({ view }: SettingsScreenProps) {
       appVersionText,
       handleHostRemoved,
       handleLanguageChange,
+      handleOpenAgentProfilesFromSearch,
       handlePlaybackTest,
       isDesktopApp,
       isPlaybackTestRunning,
