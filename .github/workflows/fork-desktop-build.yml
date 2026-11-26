@@ -16,8 +16,8 @@ env:
 
 jobs:
   build:
-    name: macOS arm64 (WarpBuild) source, tests and desktop artifact
-    runs-on: warp-macos-26-arm64-6x
+    name: macOS arm64 (GitHub-hosted macos-26) source, tests and desktop artifact
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
