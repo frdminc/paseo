@@ -3,8 +3,11 @@ import {
   collectKnownTerminalIds,
   collectScriptTerminalIds,
   collectStandaloneTerminalIds,
+  createInitialTerminalFocusRefetchGate,
+  isWorkspaceTerminalsHydrated,
   reconcilePendingScriptTerminals,
   removeTerminalFromPayload,
+  resolveTerminalFocusRefetchTransition,
   upsertCreatedTerminalPayload,
   type ListTerminalsPayload,
 } from "@/screens/workspace/terminals/state";
@@ -95,5 +98,82 @@ describe("workspace terminal state", () => {
       requestId: "existing",
       terminals: [],
     });
+  });
+
+  it("holds terminalsHydrated false on mount, refocus, and queryKey switches with stale cache (#9378)", () => {
+    const keyA = "srv_1\u0000/repo/a\u0000wks_a";
+    const keyB = "srv_1\u0000/repo/b\u0000wks_b";
+
+    // Cold mount without cached data does not gate hydration
+    const coldGate = createInitialTerminalFocusRefetchGate({
+      canCreateNow: true,
+      queryKeySignature: keyA,
+      queryIsSuccess: false,
+    });
+    expect(coldGate.pendingToken).toBeNull();
+
+    // Evicted workspace remounting with stale cached data gates hydration immediately
+    const remountGate = createInitialTerminalFocusRefetchGate({
+      canCreateNow: true,
+      queryKeySignature: keyA,
+      queryIsSuccess: true,
+    });
+    expect(remountGate.pendingToken).toBe(1);
+    expect(
+      isWorkspaceTerminalsHydrated({
+        queryIsSuccess: true,
+        pendingFocusRefetchToken: remountGate.pendingToken,
+      }),
+    ).toBe(false);
+
+    // Retained workspace transitions unfocused -> focused with cached data
+    const unfocusedGate = resolveTerminalFocusRefetchTransition({
+      gate: remountGate,
+      canCreateNow: false,
+      queryKeySignature: keyA,
+      queryIsSuccess: true,
+    });
+    expect(unfocusedGate.pendingToken).toBeNull();
+
+    const refocusedGate = resolveTerminalFocusRefetchTransition({
+      gate: unfocusedGate,
+      canCreateNow: true,
+      queryKeySignature: keyA,
+      queryIsSuccess: true,
+    });
+    expect(refocusedGate.pendingToken).toBe(2);
+    expect(
+      isWorkspaceTerminalsHydrated({
+        queryIsSuccess: true,
+        pendingFocusRefetchToken: refocusedGate.pendingToken,
+      }),
+    ).toBe(false);
+
+    // Steady-state focused re-renders return the identical gate object
+    expect(
+      resolveTerminalFocusRefetchTransition({
+        gate: refocusedGate,
+        canCreateNow: true,
+        queryKeySignature: keyA,
+        queryIsSuccess: true,
+      }),
+    ).toBe(refocusedGate);
+
+    // Switching queryKey while focused with cached data also allocates a fresh token
+    const switchedKeyGate = resolveTerminalFocusRefetchTransition({
+      gate: { ...refocusedGate, pendingToken: null },
+      canCreateNow: true,
+      queryKeySignature: keyB,
+      queryIsSuccess: true,
+    });
+    expect(switchedKeyGate.pendingToken).toBe(3);
+
+    // Once refetch settles (token cleared), hydration becomes true
+    expect(
+      isWorkspaceTerminalsHydrated({
+        queryIsSuccess: true,
+        pendingFocusRefetchToken: null,
+      }),
+    ).toBe(true);
   });
 });
