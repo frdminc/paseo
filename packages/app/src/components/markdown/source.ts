@@ -1,3 +1,4 @@
+import { parsePaseoDeepLink } from "@getpaseo/protocol/deep-link";
 import { pluginOverviewUrl } from "@getpaseo/protocol/plugin-overview";
 import { classifyAssistantFileLink } from "@/assistant-file-links";
 import { ASSISTANT_FILE_EXTENSIONS } from "@/assistant-file-links/extensions";
@@ -25,12 +26,17 @@ const FILE_NAME = String.raw`${PATH_SEGMENT}\.(?:${FILE_EXTENSIONS})`;
 // Bare prose paths need a known extension, a line suffix, or at least two separators.
 const PROSE_PATH = String.raw`(?:${PATH_PREFIX}${HAS_PATH_LETTER}${SEPARATED_PATH}|${HAS_PATH_LETTER}(?:${PATH_SEGMENT}(?:[\\/]${PATH_SEGMENT})*[\\/]${FILE_NAME}|${PATH_SEGMENT}(?:[\\/]${PATH_SEGMENT}){2,}|${SEPARATED_PATH}(?=:)))`;
 
-function createTextPattern(path: string, forgeReferencePattern?: string): RegExp {
-  // Forge references come before paths so `group/project#12` is not read as a path.
+function createTextPattern(
+  path: string,
+  forgeReferencePattern?: string,
+  allowPaseoLinks = false,
+): RegExp {
+  // Forge references and paseo:// links come before paths so substrings are not read as file paths.
+  const bareUrl = allowPaseoLinks ? `(?:${HTTP_BARE_URL}|${PASEO_BARE_URL})` : HTTP_BARE_URL;
   const forgeReference = forgeReferencePattern ? `|${forgeReferencePattern}` : "";
   // The native adapter mistakes a literal + in lookbehind for a quantifier; use its hex escape.
   return new RegExp(
-    String.raw`(?:${BARE_URL}${forgeReference}|(?<![a-zA-Z0-9\u0080-\uFFFF_@.%\x2b~:/\\-])(?:${path}|${FILE_NAME})${LINE_SUFFIX}(?![a-zA-Z0-9\u0080-\uFFFF_@%+:/\\-]|\.${PATH_CHARACTER}))`,
+    String.raw`(?:${bareUrl}${forgeReference}|(?<![a-zA-Z0-9\u0080-\uFFFF_@.%\x2b~:/\\-])(?:${path}|${FILE_NAME})${LINE_SUFFIX}(?![a-zA-Z0-9\u0080-\uFFFF_@%+:/\\-]|\.${PATH_CHARACTER}))`,
     "g",
   );
 }
@@ -42,28 +48,36 @@ const URL_BOUNDARY =
   "\\u2018\\u2019\\u201C\\u201D\\u2026\\u3000-\\u3003\\u3008-\\u3011\\u3014-\\u301F\\uFF01-\\uFF0F\\uFF1A-\\uFF20\\uFF3B-\\uFF40\\uFF5B-\\uFF65";
 const URL_CHARACTER = String.raw`[^\s<>()"'\x60${URL_BOUNDARY}]`;
 const URL_GROUP = String.raw`\(${URL_CHARACTER}*\)`;
-const BARE_URL = String.raw`https?://(?:${URL_CHARACTER}|${URL_GROUP})*(?:[^\s<>()"'\x60.,;:!?${URL_BOUNDARY}]|${URL_GROUP})`;
+const HTTP_BARE_URL = String.raw`https?://(?:${URL_CHARACTER}|${URL_GROUP})*(?:[^\s<>()"'\x60.,;:!?${URL_BOUNDARY}]|${URL_GROUP})`;
+// Flat character classes only: group alternations inside `*` overflow Java/ICU backtracking stacks.
+const PASEO_BARE_URL = String.raw`paseo://h/${URL_CHARACTER}*[^\s<>()"'\x60.,;:!?${URL_BOUNDARY}]`;
 
 const TEXT_PATTERN = createTextPattern(PROSE_PATH);
-// One entry per distinct workspace forge remote; reuse keeps the engine's regex identity stable.
-const textPatternsByForgeReference = new Map<string, RegExp>();
-function textPattern(forgeReferencePattern?: string): RegExp {
-  if (!forgeReferencePattern) return TEXT_PATTERN;
-  let pattern = textPatternsByForgeReference.get(forgeReferencePattern);
+const TEXT_PATTERN_WITH_PASEO = createTextPattern(PROSE_PATH, undefined, true);
+// One entry per distinct workspace forge remote + paseo link mode; reuse keeps regex identity stable.
+const textPatternsByKey = new Map<string, RegExp>();
+function textPattern(forgeReferencePattern?: string, allowPaseoLinks = false): RegExp {
+  if (!forgeReferencePattern) return allowPaseoLinks ? TEXT_PATTERN_WITH_PASEO : TEXT_PATTERN;
+  const key = `${allowPaseoLinks ? "1" : "0"}:${forgeReferencePattern}`;
+  let pattern = textPatternsByKey.get(key);
   if (!pattern) {
-    pattern = createTextPattern(PROSE_PATH, forgeReferencePattern);
-    textPatternsByForgeReference.set(forgeReferencePattern, pattern);
+    pattern = createTextPattern(PROSE_PATH, forgeReferencePattern, allowPaseoLinks);
+    textPatternsByKey.set(key, pattern);
   }
   return pattern;
 }
 
 // External Markdown links only what its author wrote as an https URL.
 const EXTERNAL_LINKS = {
-  text: new RegExp(BARE_URL.replace("https?", "https"), "g"),
+  text: new RegExp(HTTP_BARE_URL.replace("https?", "https"), "g"),
   inlineCode: /^https:\/\/[^\s<>]+$/,
 };
 
-function linkMetadata(inlineCodePaths: ReadonlySet<string>, forgeReferencePattern?: string) {
+function linkMetadata(
+  inlineCodePaths: ReadonlySet<string>,
+  forgeReferencePattern?: string,
+  allowPaseoLinks = false,
+) {
   // The engine accepts regexes on both platforms. Classify complete code spans
   // first, then pass literal matches rather than maintaining a second path grammar.
   const alternatives = [...inlineCodePaths].map((path) =>
@@ -71,7 +85,7 @@ function linkMetadata(inlineCodePaths: ReadonlySet<string>, forgeReferencePatter
   );
   return {
     linkRecognition: {
-      text: textPattern(forgeReferencePattern),
+      text: textPattern(forgeReferencePattern, allowPaseoLinks),
       inlineCode: new RegExp(
         String.raw`^(?:https?://[^\s<>]+${alternatives.length ? `|${alternatives.join("|")}` : ""})$`,
       ),
@@ -84,6 +98,7 @@ function collectInlineCodePaths(
   source: string,
   workspaceRoot?: string,
   commandNames?: ReadonlySet<string>,
+  allowPaseoLinks = false,
 ): ReadonlySet<string> {
   const paths = new Set<string>();
   const previousEnds = new Map<number, number>();
@@ -100,6 +115,10 @@ function collectInlineCodePaths(
     // CommonMark code spans replace line endings and strip one surrounding space.
     if (value.startsWith(" ") && value.endsWith(" ") && /[^ ]/.test(value)) {
       value = value.slice(1, -1);
+    }
+    if (allowPaseoLinks && parsePaseoDeepLink(value) !== null) {
+      paths.add(value);
+      continue;
     }
     const classification = classifyAssistantFileLink(value, { workspaceRoot });
     if (
@@ -165,6 +184,8 @@ export function prepareMarkdownSource(
      * recognized as a file, forge reference or command.
      */
     external?: boolean;
+    /** Recognize and linkify internal `paseo://h/...` deep links on trusted in-app surfaces. */
+    allowPaseoLinks?: boolean;
   } = {},
 ) {
   source = normalizeMarkdownHtml(source);
@@ -176,11 +197,13 @@ export function prepareMarkdownSource(
       mdastExtensions: [gfmTableFromMarkdown()],
     }));
   const external = options.external === true;
+  const allowPaseoLinks = !external && options.allowPaseoLinks === true;
   const metadata = external
     ? { linkRecognition: EXTERNAL_LINKS, linkSource: markdownLinkSource }
     : linkMetadata(
-        collectInlineCodePaths(source, workspaceRoot, options.commandNames),
+        collectInlineCodePaths(source, workspaceRoot, options.commandNames, allowPaseoLinks),
         options.forgeReferencePattern,
+        allowPaseoLinks,
       );
   const edits: { start: number; end: number; text: string }[] = [];
   if (
@@ -192,7 +215,8 @@ export function prepareMarkdownSource(
       source,
     ) &&
     !(workspaceRoot && source.includes("](")) &&
-    !(external && /\]|<[a-z]+:/i.test(source))
+    !(external && /\]|<[a-z]+:/i.test(source)) &&
+    !(!allowPaseoLinks && /paseo:/i.test(source))
   ) {
     return { images, ...metadata, render: () => source };
   }
@@ -267,12 +291,11 @@ export function prepareMarkdownSource(
       if (lineEnd < end) split(lineEnd);
     }
   }
-  // An external link to anything but an https URL keeps its label and loses the brackets and
-  // destination around it, so edits inside the label still apply.
-  function dropUnsafeDestination(node: Nodes, start: number, end: number) {
-    if (node.type !== "link" && node.type !== "linkReference") return;
-    const target = node.type === "link" ? node : definitions.get(node.identifier);
-    if (pluginOverviewUrl(target?.url)) return;
+  function stripLinkDestination(
+    node: Extract<Nodes, { type: "link" | "linkReference" }>,
+    start: number,
+    end: number,
+  ) {
     const labelStart = node.children[0]?.position?.start.offset;
     const labelEnd = node.children.at(-1)?.position?.end.offset;
     if (labelStart === undefined || labelEnd === undefined) {
@@ -281,6 +304,22 @@ export function prepareMarkdownSource(
     }
     edits.push({ start, end: labelStart, text: "" });
     edits.push({ start: labelEnd, end, text: "" });
+  }
+  // Strip disallowed link destinations while keeping the link label:
+  // - external surfaces allow only https overview URLs;
+  // - internal surfaces with `allowPaseoLinks === false` strip `paseo:` destinations so browsers
+  //   and Electron never render live `<a href="paseo://...">` anchors.
+  function dropDisallowedLinkDestination(node: Nodes, start: number, end: number) {
+    if (node.type !== "link" && node.type !== "linkReference") return;
+    const target = node.type === "link" ? node : definitions.get(node.identifier);
+    if (external) {
+      if (pluginOverviewUrl(target?.url)) return;
+      stripLinkDestination(node, start, end);
+      return;
+    }
+    if (!allowPaseoLinks && target?.url && /^paseo:/i.test(target.url.trim())) {
+      stripLinkDestination(node, start, end);
+    }
   }
   function visit(node: Nodes, previous?: Nodes) {
     const position = node.position;
@@ -301,7 +340,7 @@ export function prepareMarkdownSource(
         const boundary = lineStart - newline.length;
         edits.push({ start: boundary, end: lineStart, text: `${newline}${blank}${newline}` });
       }
-      if (external) dropUnsafeDestination(node, start, end);
+      dropDisallowedLinkDestination(node, start, end);
       if (node.type === "link") {
         const title = workspaceHoverTitle(node, source.slice(start, end), workspaceRoot);
         if (title !== null)

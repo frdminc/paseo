@@ -366,4 +366,57 @@ describe("buildWorkspaceTabMenuEntries", () => {
     expect(agentSeparator?.key).toBe("rename-separator");
     expect(terminalSeparator?.key).toBe("rename-separator");
   });
+
+  it("includes Copy link when onCopyTabLink is provided and canCopyTabLink returns true", () => {
+    const onCopyTabLink = vi.fn();
+    const terminalTab: WorkspaceTabDescriptor = {
+      key: "terminal_abc",
+      tabId: "terminal_abc",
+      kind: "terminal",
+      target: { kind: "terminal", terminalId: "terminal-abc" },
+    };
+    const draftTab: WorkspaceTabDescriptor = {
+      key: "draft_1",
+      tabId: "draft_1",
+      kind: "draft",
+      target: { kind: "draft", draftId: "draft_1" },
+    };
+    const shared = {
+      surface: "desktop" as const,
+      index: 0,
+      tabCount: 1,
+      menuTestIDBase: "workspace-tab-context",
+      onCopyResumeCommand: vi.fn(),
+      onCopyAgentId: vi.fn(),
+      onCopyTerminalId: vi.fn(),
+      onCopyFilePath: vi.fn(),
+      onCopyTabLink,
+      canCopyTabLink: (tab: WorkspaceTabDescriptor) => tab.target.kind !== "draft",
+      onReloadAgent: vi.fn(),
+      onRenameTab: vi.fn(),
+      onCloseTab: vi.fn(),
+      onCloseTabsBefore: vi.fn(),
+      onCloseTabsAfter: vi.fn(),
+      onCloseOtherTabs: vi.fn(),
+    };
+
+    const terminalEntries = buildWorkspaceTabMenuEntries({ ...shared, tab: terminalTab });
+    const copyLink = terminalEntries.find(
+      (entry) => entry.kind === "item" && entry.key === "copy-link",
+    );
+    expect(copyLink).toMatchObject({
+      kind: "item",
+      key: "copy-link",
+      label: "Copy link",
+      icon: "link",
+      testID: "workspace-tab-context-copy-link",
+    });
+    if (copyLink?.kind === "item") copyLink.onSelect();
+    expect(onCopyTabLink).toHaveBeenCalledWith(terminalTab);
+
+    const draftEntries = buildWorkspaceTabMenuEntries({ ...shared, tab: draftTab });
+    expect(draftEntries.some((entry) => entry.kind === "item" && entry.key === "copy-link")).toBe(
+      false,
+    );
+  });
 });

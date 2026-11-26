@@ -42,10 +42,11 @@ export function useMarkdownSource(
     commandNames?: ReadonlySet<string>;
     forgeReferencePattern?: string;
     external?: boolean;
+    allowPaseoLinks?: boolean;
   } = {},
 ) {
   const occurrenceKey = useId();
-  const { commandNames, forgeReferencePattern, external } = links;
+  const { commandNames, forgeReferencePattern, external, allowPaseoLinks } = links;
   const prepared = useMemo(
     () =>
       prepareMarkdownSource(text, context.workspaceRoot, {
@@ -53,8 +54,9 @@ export function useMarkdownSource(
         commandNames,
         forgeReferencePattern,
         external,
+        allowPaseoLinks,
       }),
-    [text, context.workspaceRoot, commandNames, forgeReferencePattern, external],
+    [text, context.workspaceRoot, commandNames, forgeReferencePattern, external, allowPaseoLinks],
   );
   const sources = [...new Set(prepared.images.map((image) => image.source))];
   const acquisitions = sources.map((source) => {

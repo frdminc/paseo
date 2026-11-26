@@ -1,5 +1,13 @@
 import { Text } from "react-native";
-import { forwardRef, useCallback, useMemo, useState, type ComponentProps } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useMemo,
+  useState,
+  type ComponentProps,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import type {
   CodeBlockRendererProps,
   LinkRendererProps,
@@ -61,10 +69,28 @@ function WebLink({ link, anchorProps, children }: LinkRendererProps) {
         : anchorProps,
     [anchorProps, recognized],
   );
+  const resolvedHref = forgeUrl ?? anchorProps.href;
+  const isPaseoSchemeHref =
+    typeof resolvedHref === "string" && /^paseo:/i.test(resolvedHref.trim());
+  const anchorOnClick = copyAnchorProps.onClick;
+  const anchorOnKeyDown = copyAnchorProps.onKeyDown;
+  const handlePaseoKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLAnchorElement>) => {
+      anchorOnKeyDown?.(event);
+      if (!event.defaultPrevented && event.key === "Enter") {
+        event.preventDefault();
+        anchorOnClick?.(event as unknown as MouseEvent<HTMLAnchorElement>);
+      }
+    },
+    [anchorOnClick, anchorOnKeyDown],
+  );
   const anchor = (
     <a
       {...copyAnchorProps}
-      href={forgeUrl ?? anchorProps.href}
+      href={isPaseoSchemeHref ? undefined : resolvedHref}
+      role={isPaseoSchemeHref ? "link" : copyAnchorProps.role}
+      tabIndex={isPaseoSchemeHref ? 0 : copyAnchorProps.tabIndex}
+      onKeyDown={isPaseoSchemeHref ? handlePaseoKeyDown : anchorOnKeyDown}
       style={anchorStyle}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
