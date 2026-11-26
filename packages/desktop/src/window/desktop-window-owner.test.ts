@@ -79,4 +79,36 @@ describe("desktop window owner", () => {
     h.close(1);
     expect(h.owner.takePendingProject(1)).toBeNull();
   });
+
+  it("queues cold-start tab deep links into the newly created window inbox", async () => {
+    const delivered: Array<{ webContentsId: number; target: Target }> = [];
+    let nextId = 1;
+    const owner = createDesktopWindowOwner<Target>({
+      async create(input) {
+        const id = nextId++;
+        input.onCreated(id);
+        return {
+          webContentsId: id,
+          isDestroyed: () => false,
+          isVisible: () => true,
+          isMinimized: () => false,
+          restore: () => {},
+          show: () => {},
+          focus: () => {},
+          sendAgent: () => {},
+        };
+      },
+      windows: () => [],
+      focusedWindow: () => null,
+      agentRoute: () => "/h/srv/workspace/wks",
+      deliverAgent: (webContentsId, target) => {
+        delivered.push({ webContentsId, target });
+        return null;
+      },
+      needsDeliveryOnColdStart: () => true,
+    });
+
+    await owner.openOrFocusAgent({ id: "terminal-9" });
+    expect(delivered).toEqual([{ webContentsId: 1, target: { id: "terminal-9" } }]);
+  });
 });

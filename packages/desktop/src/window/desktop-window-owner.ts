@@ -22,12 +22,15 @@ interface DesktopWindowOwnerPort<TAgentTarget> {
   focusedWindow(): OwnedDesktopWindow<TAgentTarget> | null;
   agentRoute(target: TAgentTarget): string;
   deliverAgent(webContentsId: number, target: TAgentTarget): TAgentTarget | null;
+  /** When true, also queue `target` for renderer delivery after creating a cold-start window. */
+  needsDeliveryOnColdStart?(target: TAgentTarget): boolean;
 }
 
 export interface DesktopWindowOwner<TAgentTarget> {
   openPrimary(input?: {
     initialRoute?: string | null;
     pendingProjectPath?: string | null;
+    initialDeepLink?: TAgentTarget | null;
   }): Promise<void>;
   openAdditional(input?: { pendingProjectPath?: string | null }): Promise<void>;
   openOrFocusAgent(target: TAgentTarget): Promise<void>;
@@ -44,12 +47,18 @@ export function createDesktopWindowOwner<TAgentTarget>(
   const open = async (input: {
     initialRoute: string | null;
     pendingProjectPath: string | null;
+    initialDeepLink?: TAgentTarget | null;
     restoreWindowState: boolean;
   }): Promise<void> => {
     await port.create({
       initialRoute: input.initialRoute,
       restoreWindowState: input.restoreWindowState,
-      onCreated: (webContentsId) => pendingProjects.set(webContentsId, input.pendingProjectPath),
+      onCreated: (webContentsId) => {
+        pendingProjects.set(webContentsId, input.pendingProjectPath);
+        if (input.initialDeepLink && port.needsDeliveryOnColdStart?.(input.initialDeepLink)) {
+          port.deliverAgent(webContentsId, input.initialDeepLink);
+        }
+      },
       onClosed: (webContentsId) => pendingProjects.delete(webContentsId),
     });
   };
@@ -59,6 +68,7 @@ export function createDesktopWindowOwner<TAgentTarget>(
       open({
         initialRoute: input.initialRoute ?? null,
         pendingProjectPath: input.pendingProjectPath ?? null,
+        initialDeepLink: input.initialDeepLink ?? null,
         restoreWindowState: true,
       }),
     openAdditional: (input = {}) =>
@@ -74,7 +84,10 @@ export function createDesktopWindowOwner<TAgentTarget>(
       if (!window || window.isDestroyed()) {
         if (!agentWindowCreation) {
           agentWindowCreation = owner
-            .openPrimary({ initialRoute: port.agentRoute(target) })
+            .openPrimary({
+              initialRoute: port.agentRoute(target),
+              initialDeepLink: target,
+            })
             .finally(() => {
               agentWindowCreation = null;
             });
