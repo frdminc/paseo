@@ -2156,7 +2156,7 @@ export class VoiceAssistantWebSocketServer {
       // COMPAT(desktopManaged): added in v0.1.X, remove optional parsing after 2027-01-16.
       desktopManaged: this.daemonRuntimeConfig?.desktopManaged === true,
       // COMPAT(forkBuild): added in djbclark fork 3 (v0.17.4), optional fork build marker for runtime capability checks.
-      forkBuild: "djbclark fork 3",
+      forkBuild: "djbclark fork 4",
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
       features: {
         connectedHosts: true,

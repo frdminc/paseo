@@ -366,7 +366,13 @@ const HOST_SECTION_ITEMS: HostSectionItem[] = [
     labelKey: "devices.title",
     icon: Smartphone,
     searchGroups: [
-      { translationPrefixes: ["devices", "settings.host.pairDevices", "openProject.tiles.pairDevice"] },
+      {
+        translationPrefixes: [
+          "devices",
+          "settings.host.pairDevices",
+          "openProject.tiles.pairDevice",
+        ],
+      },
     ],
   },
   {
@@ -1630,7 +1636,11 @@ function SettingsDetailPane({
   const isStandaloneAgentProfilesView =
     !isDesktopSearchActive && view.kind === "host" && view.section === "agent-profiles";
   let pageTitle = detailTitle;
-  if (!isDesktopSearchActive && !isCompactLayout && (view.kind === "project" || view.kind === "provider")) {
+  if (
+    !isDesktopSearchActive &&
+    !isCompactLayout &&
+    (view.kind === "project" || view.kind === "provider")
+  ) {
     pageTitle = undefined;
   }
 
