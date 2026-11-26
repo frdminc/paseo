@@ -162,6 +162,7 @@ interface InternalWebSocketLimits {
 }
 
 function setDirectWebSocketMaxPayload(ws: WebSocketLike, maxPayload: number): void {
+  if (!(ws instanceof WebSocket)) return;
   const internal = ws as unknown as InternalWebSocketLimits;
   if (internal._receiver && typeof internal._receiver._maxPayload === "number") {
     internal._receiver._maxPayload = maxPayload;
@@ -1874,7 +1875,11 @@ export class VoiceAssistantWebSocketServer {
     }
 
     pending.authenticating = true;
-    if (!(await this.admitHelloAndRaisePayloadLimit(ws, message, pending))) return;
+    if (pending.admission) {
+      setDirectWebSocketMaxPayload(ws, MAX_WEBSOCKET_MESSAGE_BYTES);
+    } else if (!(await this.admitHelloAndRaisePayloadLimit(ws, message, pending))) {
+      return;
+    }
 
     const clientId = message.clientId.trim();
     if (clientId.length === 0) {
@@ -1982,17 +1987,17 @@ export class VoiceAssistantWebSocketServer {
     message: WSHelloMessage,
     pending: PendingConnection,
   ): Promise<boolean> {
-    const pausable = ws as { pause?: () => void; resume?: () => void };
-    pausable.pause?.();
+    const directSocket = ws instanceof WebSocket ? ws : null;
+    directSocket?.pause();
     let admitted = false;
     try {
-      admitted = Boolean(pending.admission) || (await this.admitPendingHello(ws, message, pending));
+      admitted = await this.admitPendingHello(ws, message, pending);
       return admitted;
     } finally {
       if (admitted) {
         setDirectWebSocketMaxPayload(ws, MAX_WEBSOCKET_MESSAGE_BYTES);
       }
-      pausable.resume?.();
+      directSocket?.resume();
     }
   }
 
