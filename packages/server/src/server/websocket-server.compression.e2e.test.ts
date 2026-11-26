@@ -125,6 +125,34 @@ test(
   TEST_TIMEOUT_MS,
 );
 
+test(
+  "rejects an oversized compressed frame before hello admission at the pre-hello payload cap",
+  async () => {
+    const daemon = await createTestPaseoDaemon();
+    const socket = new WebSocket(`ws://127.0.0.1:${daemon.port}/ws`, { perMessageDeflate: true });
+    try {
+      await waitForOpen(socket);
+      const closed = new Promise<number>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error("Timed out waiting for pre-hello close")),
+          TEST_TIMEOUT_MS,
+        );
+        socket.once("close", (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        });
+      });
+      // Highly compressible 256 KiB payload (<1 KiB on the wire) exceeds the 64 KiB pre-hello cap.
+      socket.send(JSON.stringify({ type: "hello", padding: "0".repeat(256 * 1024) }));
+      expect(await closed).toBe(1009);
+    } finally {
+      socket.terminate();
+      await daemon.close();
+    }
+  },
+  TEST_TIMEOUT_MS,
+);
+
 async function connectSocket(
   port: number,
   clientId: string,
