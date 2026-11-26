@@ -14,8 +14,11 @@ import {
   collectKnownTerminalIds,
   collectScriptTerminalIds,
   collectStandaloneTerminalIds,
+  createInitialTerminalFocusRefetchGate,
+  isWorkspaceTerminalsHydrated,
   reconcilePendingScriptTerminals,
   removeTerminalFromPayload,
+  resolveTerminalFocusRefetchTransition,
   type ListTerminalsPayload,
   upsertCreatedTerminalPayload,
 } from "@/screens/workspace/terminals/state";
@@ -103,6 +106,51 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
   });
   const terminals = useMemo(() => query.data?.terminals ?? [], [query.data]);
   const liveTerminalIds = useMemo(() => terminals.map((terminal) => terminal.id), [terminals]);
+
+  // Refetch cached terminal lists whenever a workspace mounts or regains focus (or switches query
+  // keys) with an existing cached `query.isSuccess` snapshot before allowing tab reconciliation to
+  // prune unknown terminal IDs (prevents dropping deep-linked terminals created while unfocused or
+  // evicted, getpaseo/paseo#9378).
+  const queryKeySignature = `${normalizedServerId}\u0000${workspaceDirectory ?? ""}\u0000${normalizedWorkspaceId}`;
+  const [focusGate, setFocusGate] = useState(() =>
+    createInitialTerminalFocusRefetchGate({
+      canCreateNow,
+      queryKeySignature,
+      queryIsSuccess: query.isSuccess,
+    }),
+  );
+  const nextFocusGate = resolveTerminalFocusRefetchTransition({
+    gate: focusGate,
+    canCreateNow,
+    queryKeySignature,
+    queryIsSuccess: query.isSuccess,
+  });
+  if (nextFocusGate !== focusGate) {
+    setFocusGate(nextFocusGate);
+  }
+
+  const pendingFocusToken = nextFocusGate.pendingToken;
+  useEffect(() => {
+    if (!canCreateNow || pendingFocusToken === null) {
+      return;
+    }
+    let cancelled = false;
+    void queryClient.refetchQueries({ queryKey, exact: true }).finally(() => {
+      if (!cancelled) {
+        setFocusGate((current) =>
+          current.pendingToken === pendingFocusToken ? { ...current, pendingToken: null } : current,
+        );
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canCreateNow, pendingFocusToken, queryClient, queryKey]);
+
+  const terminalsHydrated = isWorkspaceTerminalsHydrated({
+    queryIsSuccess: query.isSuccess,
+    pendingFocusRefetchToken: pendingFocusToken,
+  });
   const [pendingScriptTerminalIds, setPendingScriptTerminalIds] = useState<Map<string, number>>(
     () => new Map(),
   );
@@ -298,5 +346,6 @@ export function useWorkspaceTerminals(input: UseWorkspaceTerminalsInput) {
     removeTerminalFromCache,
     standaloneTerminalIds,
     terminals,
+    terminalsHydrated,
   };
 }

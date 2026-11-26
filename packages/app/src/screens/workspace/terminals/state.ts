@@ -26,6 +26,79 @@ export function canCreateWorkspaceTerminal(input: {
   );
 }
 
+export interface TerminalFocusRefetchGate {
+  wasCanCreateNow: boolean;
+  queryKeySignature: string;
+  pendingToken: number | null;
+  nextToken: number;
+}
+
+export function createInitialTerminalFocusRefetchGate(input: {
+  canCreateNow: boolean;
+  queryKeySignature: string;
+  queryIsSuccess: boolean;
+}): TerminalFocusRefetchGate {
+  // Even on initial mount (for example when a previously evicted workspace remounts from a deep
+  // link), a cached `query.isSuccess` snapshot can be stale because push updates paused while
+  // unmounted (getpaseo/paseo#9378). Hold hydration until a fresh list arrives.
+  if (input.canCreateNow && input.queryIsSuccess) {
+    return {
+      wasCanCreateNow: true,
+      queryKeySignature: input.queryKeySignature,
+      pendingToken: 1,
+      nextToken: 2,
+    };
+  }
+  return {
+    wasCanCreateNow: input.canCreateNow,
+    queryKeySignature: input.queryKeySignature,
+    pendingToken: null,
+    nextToken: 1,
+  };
+}
+
+/**
+ * Transitions the focus-refetch gate for a workspace's cached terminal list.
+ * Allocates a refetch token whenever a workspace enters a focused state (or switches query keys
+ * while focused) while already holding a cached `query.isSuccess` snapshot so synchronous tab
+ * reconciliation does not prune newly created terminals (getpaseo/paseo#9378).
+ */
+export function resolveTerminalFocusRefetchTransition(input: {
+  gate: TerminalFocusRefetchGate;
+  canCreateNow: boolean;
+  queryKeySignature: string;
+  queryIsSuccess: boolean;
+}): TerminalFocusRefetchGate {
+  const { gate, canCreateNow, queryKeySignature, queryIsSuccess } = input;
+  const focusEntered = canCreateNow && !gate.wasCanCreateNow;
+  const keySwitchedWhileFocused = canCreateNow && gate.queryKeySignature !== queryKeySignature;
+
+  if (focusEntered || keySwitchedWhileFocused) {
+    return {
+      wasCanCreateNow: true,
+      queryKeySignature,
+      pendingToken: queryIsSuccess ? gate.nextToken : null,
+      nextToken: queryIsSuccess ? gate.nextToken + 1 : gate.nextToken,
+    };
+  }
+  if (!canCreateNow && (gate.wasCanCreateNow || gate.queryKeySignature !== queryKeySignature)) {
+    return {
+      wasCanCreateNow: false,
+      queryKeySignature,
+      pendingToken: null,
+      nextToken: gate.nextToken,
+    };
+  }
+  return gate;
+}
+
+export function isWorkspaceTerminalsHydrated(input: {
+  queryIsSuccess: boolean;
+  pendingFocusRefetchToken: number | null;
+}): boolean {
+  return input.queryIsSuccess && input.pendingFocusRefetchToken === null;
+}
+
 export function reconcilePendingScriptTerminals(liveTerminalIds: string[], dataUpdatedAt: number) {
   return function update(pendingTerminalIds: Map<string, number>): Map<string, number> {
     if (pendingTerminalIds.size === 0) {
