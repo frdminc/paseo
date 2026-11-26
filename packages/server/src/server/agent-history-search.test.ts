@@ -98,15 +98,19 @@ describe("matchesAgentHistoryQuery", () => {
     expect(matchesAgentHistoryQuery("   ", candidate({ title: "anything" }))).toBe(true);
   });
 
-  it("matches archived agents by agent ID prefix, substring, or full UUID", () => {
+  it("matches archived agents by exact agent ID prefix (4+ chars), substring (6+ chars), or full UUID without fuzzy false positives", () => {
     const entry = candidate({
-      id: "54b15a51-1111-4222-8333-444455556666",
+      id: "54b15a51-dead-4222-cafe-444455556666",
       title: "Unrelated title",
       workspaceName: "Unrelated workspace",
     });
+    expect(matchesAgentHistoryQuery("54b1", entry)).toBe(true);
     expect(matchesAgentHistoryQuery("54b15a51", entry)).toBe(true);
-    expect(matchesAgentHistoryQuery("4222-8333", entry)).toBe(true);
-    expect(matchesAgentHistoryQuery("54b15a51-1111-4222-8333-444455556666", entry)).toBe(true);
-    expect(matchesAgentHistoryQuery("9999aaaa", entry)).toBe(false);
+    expect(matchesAgentHistoryQuery("4222-cafe", entry)).toBe(true);
+    expect(matchesAgentHistoryQuery("54b15a51-dead-4222-cafe-444455556666", entry)).toBe(true);
+    // Prefix < 4 chars and substring < 6 chars (including common English hex words) must not match.
+    for (const query of ["54b", "5a51", "add", "bed", "dead", "face", "cafe", "9999aaaa"]) {
+      expect(matchesAgentHistoryQuery(query, entry)).toBe(false);
+    }
   });
 });
